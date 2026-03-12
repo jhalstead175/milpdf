@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import LandingPage from './components/LandingPage';
+import './components/LandingPage.css';
 import Toolbar from './components/Toolbar';
 import PageThumbnails from './components/PageThumbnails';
 import PDFViewer from './components/PDFViewer';
@@ -15,6 +17,7 @@ import './App.css';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 function App() {
+  const [view, setView] = useState(isElectron ? 'editor' : 'landing');
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pdfBytes, setPdfBytes] = useState(null);
   const [renderDoc, setRenderDoc] = useState(null);
@@ -324,6 +327,15 @@ function App() {
   }, [handleOpen, handleSave, handlePrint, handleDeletePage, annHistory, numPages, renderDoc]);
 
   return (
+    <>
+      {view === 'landing' ? (
+        <LandingPage
+          onLaunchEditor={() => setView('editor')}
+          onDownloadDesktop={() => {
+            window.open('https://github.com/jhalstead175/milpdf/releases', '_blank', 'noopener');
+          }}
+        />
+      ) : (
     <div className="app">
       <Toolbar
         onOpen={handleOpen}
@@ -404,6 +416,8 @@ function App() {
         onChange={handleMergeFile}
       />
     </div>
+      )}
+    </>
   );
 }
 
