@@ -3,6 +3,7 @@ import {
   Merge, Crop, Highlighter, Pencil, Droplets, Type,
   Download, Globe, ChevronRight, Lock, Eye, Users,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 const IC = { strokeWidth: 1.4 };
 
@@ -28,6 +29,19 @@ const pillars = [
 ];
 
 export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
+  const [downloadCount, setDownloadCount] = useState(null);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/jhalstead175/milpdf/releases')
+      .then(r => r.ok ? r.json() : [])
+      .then(releases => {
+        const total = releases.reduce((sum, rel) =>
+          sum + rel.assets.reduce((s, a) => s + (a.download_count || 0), 0), 0);
+        if (total > 0) setDownloadCount(total);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="landing">
       {/* ===== NAV ===== */}
@@ -146,6 +160,11 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
               Use in Browser <ChevronRight size={16} {...IC} />
             </button>
           </div>
+          {downloadCount !== null && (
+            <p className="download-counter">
+              <Download size={14} {...IC} /> <strong>{downloadCount.toLocaleString()}</strong> desktop downloads
+            </p>
+          )}
         </div>
       </section>
 

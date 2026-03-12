@@ -458,6 +458,24 @@
   flex-wrap: wrap;
 }
 
+.download-counter {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--lp-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-counter strong {
+  color: var(--lp-accent);
+  font-weight: 700;
+}
+
+.download-counter svg {
+  color: var(--lp-accent);
+}
+
 /* ===== FOOTER ===== */
 .landing-footer {
   padding: 40px 0;
