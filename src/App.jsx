@@ -18,6 +18,19 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 
 function App() {
   const [view, setView] = useState(isElectron ? 'editor' : 'landing');
+
+  // When switching to editor, lock body scroll and reset scroll position
+  useEffect(() => {
+    if (view === 'editor') {
+      window.scrollTo(0, 0);
+      document.documentElement.classList.add('editor-active');
+      document.body.classList.add('editor-active');
+    } else {
+      document.documentElement.classList.remove('editor-active');
+      document.body.classList.remove('editor-active');
+    }
+  }, [view]);
+
   const [pdfDoc, setPdfDoc] = useState(null);
   const [pdfBytes, setPdfBytes] = useState(null);
   const [renderDoc, setRenderDoc] = useState(null);

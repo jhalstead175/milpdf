@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { FileSearch } from 'lucide-react';
 import { renderPageToCanvas } from '../utils/pdfUtils';
 
 export default function PDFViewer({

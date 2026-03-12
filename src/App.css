@@ -1,13 +1,21 @@
 /* ===== Layout ===== */
+html.editor-active,
+html.editor-active body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+html.editor-active #root {
+  height: 100vh;
+}
+
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  position: fixed;
-  top: 0;
-  left: 0;
+  background: #1e1e2e;
 }
 
 /* ===== Toolbar ===== */
