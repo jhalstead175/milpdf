@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { Upload } from 'lucide-react';
 
 export default function SignaturePad({ onSave, onClose }) {
   const canvasRef = useRef(null);
@@ -117,7 +118,7 @@ export default function SignaturePad({ onSave, onClose }) {
           onTouchEnd={stopDrawing}
         />
         <div className="modal-actions">
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary">📁 Upload</button>
+          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary"><Upload size={15} strokeWidth={1.8} /> Upload</button>
           <button onClick={clear} className="btn-secondary">Clear</button>
           <button onClick={save} disabled={!hasDrawn} className="btn-primary">Use Signature</button>
           <button onClick={onClose} className="btn-secondary">Cancel</button>

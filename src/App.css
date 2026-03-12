@@ -60,6 +60,12 @@
   transition: all 0.15s;
 }
 
+.toolbar button svg,
+.toolbar-group svg {
+  color: #34d399;
+  flex-shrink: 0;
+}
+
 .toolbar button:hover:not(:disabled) {
   background: #313244;
   border-color: #45475a;
@@ -71,13 +77,17 @@
   color: #89b4fa;
 }
 
+.toolbar button.active svg {
+  color: #6ee7b7;
+}
+
 .toolbar button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
-.tb-icon {
-  font-size: 14px;
+.toolbar button:disabled svg {
+  color: inherit;
 }
 
 .zoom-label,
@@ -192,9 +202,9 @@
 }
 
 .empty-icon {
-  font-size: 64px;
+  color: #34d399;
   display: block;
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
 }
 
 .empty-message h2 {
@@ -409,6 +419,12 @@
 .crop-actions button:last-child {
   background: #45475a;
   color: #cdd6f4;
+}
+
+/* ===== Signature Modal Icons ===== */
+.modal-actions svg {
+  color: #34d399;
+  vertical-align: middle;
 }
 
 /* ===== Modal (Signature Pad) ===== */

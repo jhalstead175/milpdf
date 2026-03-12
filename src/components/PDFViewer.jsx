@@ -237,7 +237,7 @@ export default function PDFViewer({
         onDrop={handleDrop}
       >
         <div className="empty-message">
-          <span className="empty-icon">📄</span>
+          <FileSearch size={64} strokeWidth={1.2} className="empty-icon" />
           <h2>Open a PDF to get started</h2>
           <p>Click &ldquo;Open&rdquo; in the toolbar, or drag &amp; drop a PDF here</p>
         </div>
