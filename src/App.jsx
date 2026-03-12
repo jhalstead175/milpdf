@@ -8,8 +8,8 @@ import SignaturePad from './components/SignaturePad';
 import useHistory from './hooks/useHistory';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedAnnotations, cropPage, downloadBlob,
-  addWatermark, splitPdf, printPdf,
+  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedAnnotations, cropPage,
+  saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { convertPdfToWord } from './utils/wordExport';
 import './App.css';
@@ -41,6 +41,7 @@ function App() {
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
+  const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
 
@@ -140,7 +141,10 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (annHistory.state.length > 0) {
-        bytes = await embedAnnotations(pdfBytes, annHistory.state);
+        bytes = await embedAnnotations(bytes, annHistory.state);
+      }
+      if (watermarkText) {
+        bytes = await addWatermark(bytes, watermarkText);
       }
       if (isElectron) {
         const base64 = btoa(
@@ -148,14 +152,14 @@ function App() {
         );
         await window.electronAPI.saveFileDialog(fileName, base64);
       } else {
-        downloadBlob(bytes, fileName);
+        await saveWithDialog(bytes, fileName);
       }
     } catch (err) {
       alert('Failed to save PDF: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, fileName]);
+  }, [pdfBytes, annHistory.state, fileName, watermarkText]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -280,21 +284,16 @@ function App() {
   }, [pdfBytes, numPages, updateFromResult, annHistory]);
 
   // --- Watermark ---
-  const handleWatermark = useCallback(async () => {
-    if (!pdfBytes) return;
-    const text = prompt('Watermark text:', 'CONFIDENTIAL');
-    if (!text) return;
-    setLoading(true);
-    try {
-      const bytes = await addWatermark(pdfBytes, text);
-      const result = await loadPdf(bytes);
-      updateFromResult(result);
-    } catch (err) {
-      alert('Failed to add watermark: ' + err.message);
-    } finally {
-      setLoading(false);
+  const handleWatermark = useCallback(() => {
+    if (watermarkText) {
+      if (confirm('Remove watermark?')) {
+        setWatermarkText('');
+      }
+      return;
     }
-  }, [pdfBytes, updateFromResult]);
+    const text = prompt('Watermark text:', 'CONFIDENTIAL');
+    if (text) setWatermarkText(text);
+  }, [watermarkText]);
 
   // --- Split ---
   const handleSplit = useCallback(async () => {
@@ -318,10 +317,22 @@ function App() {
   }, [pdfBytes, numPages, fileName]);
 
   // --- Print ---
-  const handlePrint = useCallback(() => {
+  const handlePrint = useCallback(async () => {
     if (!pdfBytes) return;
-    printPdf(pdfBytes);
-  }, [pdfBytes]);
+    setLoading(true);
+    try {
+      let bytes = pdfBytes;
+      if (annHistory.state.length > 0) {
+        bytes = await embedAnnotations(bytes, annHistory.state);
+      }
+      if (watermarkText) {
+        bytes = await addWatermark(bytes, watermarkText);
+      }
+      printPdf(bytes);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, annHistory.state, watermarkText]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -461,6 +472,7 @@ function App() {
         canRedo={annHistory.canRedo}
         onPrint={handlePrint}
         onWatermark={handleWatermark}
+        watermarkText={watermarkText}
         onSplit={handleSplit}
         onImagesToPdf={handleImagesToPdf}
       />
@@ -488,6 +500,7 @@ function App() {
           onCropApply={handleCropApply}
           onCropCancel={() => setActiveTool('select')}
           onDropFile={loadFile}
+          watermarkText={watermarkText}
         />
       </div>
 

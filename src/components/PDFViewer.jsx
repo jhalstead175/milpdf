@@ -7,7 +7,7 @@ export default function PDFViewer({
   annotations, onAddAnnotation, onDeleteAnnotation, onUpdateAnnotation,
   signatureDataUrl, onRequestSignature,
   onCropApply, onCropCancel,
-  onDropFile,
+  onDropFile, watermarkText,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -501,6 +501,13 @@ export default function PDFViewer({
               <button onClick={() => { setCropRect(null); onCropCancel(); }}>Cancel</button>
             </div>
           </>
+        )}
+
+        {/* Watermark overlay */}
+        {watermarkText && (
+          <div className="watermark-overlay">
+            <span>{watermarkText}</span>
+          </div>
         )}
       </div>
     </div>

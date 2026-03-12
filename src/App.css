@@ -626,6 +626,26 @@ html.editor-active #root {
   cursor: crosshair;
 }
 
+/* ===== Watermark Overlay ===== */
+.watermark-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.watermark-overlay span {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: clamp(24px, 8vw, 72px);
+  color: rgba(180, 180, 180, 0.3);
+  transform: rotate(-45deg);
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* ===== Insert Page Dialog ===== */
 .insert-dialog {
   text-align: center;

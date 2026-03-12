@@ -12,7 +12,7 @@ export default function Toolbar({
   onRotatePage, activeTool, onToolChange, onExportWord,
   zoom, onZoomChange, hasDoc, currentPage, numPages,
   onPageChange, onUndo, onRedo, canUndo, canRedo,
-  onPrint, onWatermark, onSplit, onImagesToPdf,
+  onPrint, onWatermark, onSplit, onImagesToPdf, watermarkText,
 }) {
   return (
     <div className="toolbar">
@@ -79,8 +79,8 @@ export default function Toolbar({
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
-        <button onClick={onWatermark} disabled={!hasDoc} title="Add watermark to all pages">
-          <Droplets {...IC} /> Watermark
+        <button className={watermarkText ? 'active' : ''} onClick={onWatermark} disabled={!hasDoc} title={watermarkText ? 'Remove watermark' : 'Add watermark to all pages'}>
+          <Droplets {...IC} /> {watermarkText ? 'Remove WM' : 'Watermark'}
         </button>
         <button onClick={onExportWord} disabled={!hasDoc} title="Export to Word (.docx)">
           <FileText {...IC} /> Word

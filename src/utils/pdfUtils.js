@@ -233,6 +233,26 @@ export async function cropPage(pdfDoc, pageIndex, cropBox) {
   return refreshRender(pdfDoc);
 }
 
+export async function saveWithDialog(bytes, filename) {
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'PDF Files', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(new Blob([bytes], { type: 'application/pdf' }));
+      await writable.close();
+      return true;
+    } catch (err) {
+      if (err.name === 'AbortError') return false;
+      throw err;
+    }
+  }
+  downloadBlob(bytes, filename);
+  return true;
+}
+
 export function downloadBlob(bytes, filename) {
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
@@ -249,13 +269,18 @@ export async function addWatermark(currentBytes, text) {
   const pdfDoc = await PDFDocument.load(currentBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
+  const cos45 = Math.cos(Math.PI / 4);
+  const sin45 = Math.sin(Math.PI / 4);
   for (const page of pages) {
     const { width, height } = page.getSize();
     const fontSize = Math.min(width, height) / 6;
     const textWidth = font.widthOfTextAtSize(text, fontSize);
+    const textHeight = fontSize * 0.75;
+    const x = width / 2 - (textWidth * cos45) / 2 + (textHeight * sin45) / 2;
+    const y = height / 2 - (textWidth * sin45) / 2 - (textHeight * cos45) / 2;
     page.drawText(text, {
-      x: (width - textWidth) / 2,
-      y: height / 2,
+      x,
+      y,
       size: fontSize,
       font,
       color: rgb(0.75, 0.75, 0.75),
@@ -279,15 +304,13 @@ export async function splitPdf(currentBytes, fromPage, toPage) {
 export function printPdf(bytes) {
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = url;
-  document.body.appendChild(iframe);
-  iframe.onload = () => {
-    iframe.contentWindow.print();
+  const w = window.open(url, '_blank');
+  if (w) {
     setTimeout(() => {
-      document.body.removeChild(iframe);
-      URL.revokeObjectURL(url);
+      try { w.print(); } catch (_) { /* user can print from PDF viewer */ }
     }, 1000);
-  };
+  } else {
+    alert('Please allow popups to print.');
+    URL.revokeObjectURL(url);
+  }
 }
