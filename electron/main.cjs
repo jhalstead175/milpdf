@@ -36,31 +36,70 @@ function createWindow() {
   // Once the renderer is ready, send any file that was passed via command line
   mainWindow.webContents.on('did-finish-load', () => {
     if (fileToOpen) {
-      sendFileToRenderer(fileToOpen);
+      // Check if it's an image file
+      const ext = path.extname(fileToOpen).toLowerCase();
+      if (IMAGE_EXTS.includes(ext)) {
+        // Collect all image files from initial args
+        const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
+        const imageFiles = args.filter(arg => {
+          const e = path.extname(arg).toLowerCase();
+          return IMAGE_EXTS.includes(e) && fs.existsSync(arg);
+        });
+        sendImagesToRenderer(imageFiles.length > 0 ? imageFiles : [fileToOpen]);
+      } else {
+        sendFileToRenderer(fileToOpen);
+      }
       fileToOpen = null;
     }
   });
 }
+
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.tif'];
 
 function sendFileToRenderer(filePath) {
   if (!mainWindow) return;
   try {
     const buffer = fs.readFileSync(filePath);
     const name = path.basename(filePath);
-    mainWindow.webContents.send('open-file', {
-      name,
-      data: buffer.toString('base64'),
-    });
+    const ext = path.extname(filePath).toLowerCase();
+    if (IMAGE_EXTS.includes(ext)) {
+      mainWindow.webContents.send('open-images', [{
+        name,
+        data: buffer.toString('base64'),
+      }]);
+    } else {
+      mainWindow.webContents.send('open-file', {
+        name,
+        data: buffer.toString('base64'),
+      });
+    }
   } catch (err) {
     console.error('Failed to read file:', err);
   }
 }
 
-// Extract PDF path from command-line args (skip electron exe and script)
+function sendImagesToRenderer(filePaths) {
+  if (!mainWindow) return;
+  try {
+    const images = filePaths.map(fp => ({
+      name: path.basename(fp),
+      data: fs.readFileSync(fp).toString('base64'),
+    }));
+    mainWindow.webContents.send('open-images', images);
+  } catch (err) {
+    console.error('Failed to read image files:', err);
+  }
+}
+
+// Extract file path from command-line args (skip electron exe and script)
 function getFileFromArgs(argv) {
   // In packaged app argv[0] is the exe, in dev argv[0] is electron, argv[1] is script
   const args = app.isPackaged ? argv.slice(1) : argv.slice(2);
-  return args.find(arg => arg.toLowerCase().endsWith('.pdf') && fs.existsSync(arg)) || null;
+  const allExts = ['.pdf', ...IMAGE_EXTS];
+  return args.find(arg => {
+    const ext = path.extname(arg).toLowerCase();
+    return allExts.includes(ext) && fs.existsSync(arg);
+  }) || null;
 }
 
 // Windows/Linux: second-instance fires when another instance is launched (e.g. double-click a PDF)
@@ -70,7 +109,19 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (_event, argv) => {
     const file = getFileFromArgs(argv);
-    if (file) sendFileToRenderer(file);
+    if (file) {
+      // Check for multiple image files in args
+      const args = app.isPackaged ? argv.slice(1) : argv.slice(2);
+      const imageFiles = args.filter(arg => {
+        const ext = path.extname(arg).toLowerCase();
+        return IMAGE_EXTS.includes(ext) && fs.existsSync(arg);
+      });
+      if (imageFiles.length > 0) {
+        sendImagesToRenderer(imageFiles);
+      } else {
+        sendFileToRenderer(file);
+      }
+    }
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();

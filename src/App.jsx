@@ -8,7 +8,7 @@ import SignaturePad from './components/SignaturePad';
 import useHistory from './hooks/useHistory';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, embedAnnotations, cropPage, downloadBlob,
+  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedAnnotations, cropPage, downloadBlob,
   addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { convertPdfToWord } from './utils/wordExport';
@@ -49,6 +49,7 @@ function App() {
   const fileInputRef = useRef(null);
   const mergeInputRef = useRef(null);
   const insertFileRef = useRef(null);
+  const imageInputRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
 
   const updateFromResult = useCallback((result) => {
@@ -88,7 +89,32 @@ function App() {
       const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
       await loadFromBuffer(bytes.buffer, fileInfo.name);
     });
-  }, [loadFromBuffer]);
+    window.electronAPI.onOpenImages(async (images) => {
+      // Convert base64 images to File objects and run imagesToPdf
+      const files = images.map(img => {
+        const binary = atob(img.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const ext = img.name.split('.').pop().toLowerCase();
+        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tiff: 'image/tiff', tif: 'image/tiff' };
+        return new File([bytes], img.name, { type: mimeMap[ext] || 'image/png' });
+      });
+      files.sort((a, b) => a.name.localeCompare(b.name));
+      try {
+        const result = await imagesToPdf(files);
+        setPdfDoc(result.pdfDoc);
+        setPdfBytes(result.bytes);
+        setRenderDoc(result.renderDoc);
+        setNumPages(result.pdfDoc.getPageCount());
+        setCurrentPage(1);
+        setFileName('images.pdf');
+        annHistory.set([]);
+        setView('editor');
+      } catch (err) {
+        alert('Failed to convert images: ' + err.message);
+      }
+    });
+  }, [loadFromBuffer, annHistory]);
 
   // --- File operations ---
   const handleOpen = useCallback(async () => {
@@ -310,6 +336,34 @@ function App() {
     }
   }, [renderDoc, fileName]);
 
+  // --- Images to PDF ---
+  const handleImagesToPdf = useCallback(() => {
+    imageInputRef.current?.click();
+  }, []);
+
+  const handleImageFiles = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setLoading(true);
+    try {
+      // Sort files by name for predictable page order
+      files.sort((a, b) => a.name.localeCompare(b.name));
+      const result = await imagesToPdf(files);
+      setPdfDoc(result.pdfDoc);
+      setPdfBytes(result.bytes);
+      setRenderDoc(result.renderDoc);
+      setNumPages(result.pdfDoc.getPageCount());
+      setCurrentPage(1);
+      setFileName('images.pdf');
+      annHistory.set([]);
+    } catch (err) {
+      alert('Failed to convert images: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  }, [annHistory]);
+
   // --- Annotations ---
   const handleAddAnnotation = useCallback((annotation) => {
     annHistory.set(prev => [...prev, annotation]);
@@ -408,6 +462,7 @@ function App() {
         onPrint={handlePrint}
         onWatermark={handleWatermark}
         onSplit={handleSplit}
+        onImagesToPdf={handleImagesToPdf}
       />
 
       <div className="main-content">
@@ -499,6 +554,14 @@ function App() {
         accept=".pdf"
         style={{ display: 'none' }}
         onChange={handleInsertFileChange}
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleImageFiles}
       />
     </div>
       )}

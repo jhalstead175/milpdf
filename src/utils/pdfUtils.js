@@ -70,6 +70,38 @@ export async function addBlankPage(pdfDoc, atIndex) {
   return refreshRender(pdfDoc);
 }
 
+export async function imagesToPdf(imageFiles) {
+  const pdfDoc = await PDFDocument.create();
+  for (const file of imageFiles) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let img;
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.png')) {
+      img = await pdfDoc.embedPng(bytes);
+    } else if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+      img = await pdfDoc.embedJpg(bytes);
+    } else {
+      // For other formats (bmp, gif, webp, tiff), convert via canvas to PNG
+      const blob = new Blob([bytes], { type: file.type });
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      const pngBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+      img = await pdfDoc.embedPng(pngBytes);
+    }
+    const { width, height } = img.scale(1);
+    const page = pdfDoc.addPage([width, height]);
+    page.drawImage(img, { x: 0, y: 0, width, height });
+  }
+  const savedBytes = await pdfDoc.save();
+  const renderDoc = await getRenderDoc(savedBytes);
+  return { pdfDoc, bytes: new Uint8Array(savedBytes), renderDoc };
+}
+
 export async function mergePdf(pdfDoc, otherArrayBuffer) {
   const otherDoc = await PDFDocument.load(new Uint8Array(otherArrayBuffer));
   const count = otherDoc.getPageCount();

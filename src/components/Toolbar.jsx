@@ -2,7 +2,7 @@ import {
   FolderOpen, Save, Printer, Undo2, Redo2, FilePlus, Trash2,
   RotateCw, FileStack, Scissors, MousePointer2, Type, Highlighter,
   Pencil, PenTool, ShieldOff, Crop, Droplets, FileText,
-  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenLine,
+  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenLine, ImagePlus,
 } from 'lucide-react';
 
 const IC = { size: 15, strokeWidth: 1.8 };
@@ -12,7 +12,7 @@ export default function Toolbar({
   onRotatePage, activeTool, onToolChange, onExportWord,
   zoom, onZoomChange, hasDoc, currentPage, numPages,
   onPageChange, onUndo, onRedo, canUndo, canRedo,
-  onPrint, onWatermark, onSplit,
+  onPrint, onWatermark, onSplit, onImagesToPdf,
 }) {
   return (
     <div className="toolbar">
@@ -84,6 +84,9 @@ export default function Toolbar({
         </button>
         <button onClick={onExportWord} disabled={!hasDoc} title="Export to Word (.docx)">
           <FileText {...IC} /> Word
+        </button>
+        <button onClick={onImagesToPdf} title="Convert images to PDF">
+          <ImagePlus {...IC} /> Images
         </button>
       </div>
 

@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenFile: (callback) => {
     ipcRenderer.on('open-file', (_event, fileInfo) => callback(fileInfo));
   },
+  // Listen for images opened via OS context menu / command line
+  onOpenImages: (callback) => {
+    ipcRenderer.on('open-images', (_event, images) => callback(images));
+  },
   // Request a native open-file dialog
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   // Request a native save-file dialog
