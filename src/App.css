@@ -632,11 +632,19 @@ html.editor-active #root {
   min-width: 320px;
 }
 
+.insert-section-label {
+  color: #34d399;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 16px 0 0;
+}
+
 .insert-options {
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin: 20px 0 12px;
+  margin: 8px 0 12px;
 }
 
 .insert-options .btn-primary {

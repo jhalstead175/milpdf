@@ -81,6 +81,17 @@ export async function mergePdf(pdfDoc, otherArrayBuffer) {
   return refreshRender(pdfDoc);
 }
 
+export async function insertPdf(pdfDoc, otherArrayBuffer, atIndex) {
+  const otherDoc = await PDFDocument.load(new Uint8Array(otherArrayBuffer));
+  const count = otherDoc.getPageCount();
+  const indices = Array.from({ length: count }, (_, i) => i);
+  const copiedPages = await pdfDoc.copyPages(otherDoc, indices);
+  copiedPages.forEach((page, i) => {
+    pdfDoc.insertPage(atIndex + i, page);
+  });
+  return refreshRender(pdfDoc);
+}
+
 export async function embedAnnotations(currentBytes, annotations) {
   const pdfDoc = await PDFDocument.load(currentBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);

@@ -8,7 +8,7 @@ import SignaturePad from './components/SignaturePad';
 import useHistory from './hooks/useHistory';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, embedAnnotations, cropPage, downloadBlob,
+  addBlankPage, mergePdf, insertPdf, embedAnnotations, cropPage, downloadBlob,
   addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { convertPdfToWord } from './utils/wordExport';
@@ -48,6 +48,8 @@ function App() {
 
   const fileInputRef = useRef(null);
   const mergeInputRef = useRef(null);
+  const insertFileRef = useRef(null);
+  const [insertPosition, setInsertPosition] = useState('after');
 
   const updateFromResult = useCallback((result) => {
     setPdfDoc(result.pdfDoc);
@@ -171,6 +173,30 @@ function App() {
       setLoading(false);
     }
   }, [pdfDoc, currentPage, updateFromResult]);
+
+  const handleInsertFromPdf = useCallback((position) => {
+    setInsertPosition(position);
+    setShowInsertDialog(false);
+    insertFileRef.current?.click();
+  }, []);
+
+  const handleInsertFileChange = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !pdfDoc) return;
+    setLoading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const atIndex = insertPosition === 'before' ? currentPage - 1 : currentPage;
+      const result = await insertPdf(pdfDoc, buf, atIndex);
+      updateFromResult(result);
+      setCurrentPage(atIndex + 1);
+    } catch (err) {
+      alert('Failed to insert PDF: ' + err.message);
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  }, [pdfDoc, currentPage, insertPosition, updateFromResult]);
 
   const handleDeletePage = useCallback(async () => {
     if (!pdfDoc || numPages <= 1) return;
@@ -420,13 +446,23 @@ function App() {
       {showInsertDialog && (
         <div className="modal-backdrop" onClick={() => setShowInsertDialog(false)}>
           <div className="modal insert-dialog" onClick={e => e.stopPropagation()}>
-            <h3>Insert Blank Page</h3>
-            <p className="modal-hint">Where should the new page go relative to page {currentPage}?</p>
+            <h3>Insert Page</h3>
+            <p className="modal-hint">Insert a blank page or pages from another PDF</p>
+            <h4 className="insert-section-label">Blank Page</h4>
             <div className="insert-options">
               <button className="btn-primary" onClick={() => handleInsertPage('before')}>
                 Before Page {currentPage}
               </button>
               <button className="btn-primary" onClick={() => handleInsertPage('after')}>
+                After Page {currentPage}
+              </button>
+            </div>
+            <h4 className="insert-section-label">From PDF File</h4>
+            <div className="insert-options">
+              <button className="btn-primary" onClick={() => handleInsertFromPdf('before')}>
+                Before Page {currentPage}
+              </button>
+              <button className="btn-primary" onClick={() => handleInsertFromPdf('after')}>
                 After Page {currentPage}
               </button>
             </div>
@@ -456,6 +492,13 @@ function App() {
         accept=".pdf"
         style={{ display: 'none' }}
         onChange={handleMergeFile}
+      />
+      <input
+        ref={insertFileRef}
+        type="file"
+        accept=".pdf"
+        style={{ display: 'none' }}
+        onChange={handleInsertFileChange}
       />
     </div>
       )}
