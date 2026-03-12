@@ -34,7 +34,7 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
       <nav className="landing-nav">
         <div className="landing-nav-inner">
           <div className="landing-nav-brand">
-            <img src="./images/milpdf_offwht_500x500.svg" alt="MilPDF" className="landing-nav-logo" />
+            <img src="./images/milpdf_offwht_500x500.png" alt="MilPDF" className="landing-nav-logo" />
             <span className="landing-nav-wordmark">MilPDF</span>
           </div>
           <div className="landing-nav-links">
@@ -153,7 +153,7 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
       <footer className="landing-footer">
         <div className="section-inner footer-inner">
           <div className="footer-brand">
-            <img src="./images/milpdf_offwht_500x500.svg" alt="MilPDF" className="footer-logo" />
+            <img src="./images/milpdf_offwht_500x500.png" alt="MilPDF" className="footer-logo" />
             <span>MilPDF</span>
           </div>
           <p className="footer-copy">
