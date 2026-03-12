@@ -40,6 +40,7 @@ function App() {
   const [activeTool, setActiveTool] = useState('select');
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
+  const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
 
@@ -149,19 +150,27 @@ function App() {
   }, [pdfDoc, updateFromResult]);
 
   // --- Page operations ---
-  const handleAddBlank = useCallback(async () => {
+  const handleAddBlank = useCallback(() => {
     if (!pdfDoc) return;
+    setShowInsertDialog(true);
+  }, [pdfDoc]);
+
+  const handleInsertPage = useCallback(async (position) => {
+    if (!pdfDoc) return;
+    setShowInsertDialog(false);
     setLoading(true);
     try {
-      const result = await addBlankPage(pdfDoc);
+      // position: 'before' = insert before currentPage, 'after' = insert after currentPage
+      const atIndex = position === 'before' ? currentPage - 1 : currentPage;
+      const result = await addBlankPage(pdfDoc, atIndex);
       updateFromResult(result);
-      setCurrentPage(result.pdfDoc.getPageCount());
+      setCurrentPage(atIndex + 1);
     } catch (err) {
-      alert('Failed to add page: ' + err.message);
+      alert('Failed to insert page: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, updateFromResult]);
+  }, [pdfDoc, currentPage, updateFromResult]);
 
   const handleDeletePage = useCallback(async () => {
     if (!pdfDoc || numPages <= 1) return;
@@ -406,6 +415,26 @@ function App() {
           onSave={handleSignatureSave}
           onClose={() => setShowSignaturePad(false)}
         />
+      )}
+
+      {showInsertDialog && (
+        <div className="modal-backdrop" onClick={() => setShowInsertDialog(false)}>
+          <div className="modal insert-dialog" onClick={e => e.stopPropagation()}>
+            <h3>Insert Blank Page</h3>
+            <p className="modal-hint">Where should the new page go relative to page {currentPage}?</p>
+            <div className="insert-options">
+              <button className="btn-primary" onClick={() => handleInsertPage('before')}>
+                Before Page {currentPage}
+              </button>
+              <button className="btn-primary" onClick={() => handleInsertPage('after')}>
+                After Page {currentPage}
+              </button>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowInsertDialog(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {loading && (

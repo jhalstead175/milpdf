@@ -21,6 +21,9 @@ export default function PDFViewer({
   const [drawingPoints, setDrawingPoints] = useState(null);
   const [dragging, setDragging] = useState(null); // { id, offsetX, offsetY }
   const [isDragOver, setIsDragOver] = useState(false);
+  const [editRect, setEditRect] = useState(null);
+  const [editStart, setEditStart] = useState(null);
+  const [editInput, setEditInput] = useState(null); // { x, y, width, height, text }
 
   // Render the current page
   useEffect(() => {
@@ -36,6 +39,7 @@ export default function PDFViewer({
     if (activeTool !== 'highlight') { setHighlightRect(null); setHighlightStart(null); }
     if (activeTool !== 'redact') { setRedactRect(null); setRedactStart(null); }
     if (activeTool !== 'draw') { setDrawingPoints(null); }
+    if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
   }, [activeTool]);
 
   const pageAnnotations = annotations.filter(a => a.pageNum === currentPage);
@@ -48,7 +52,7 @@ export default function PDFViewer({
   // --- Canvas click (text / signature placement) ---
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
-    if (activeTool === 'highlight' || activeTool === 'redact' || activeTool === 'crop' || activeTool === 'draw') return;
+    if (activeTool === 'highlight' || activeTool === 'redact' || activeTool === 'crop' || activeTool === 'draw' || activeTool === 'edit') return;
     if (dragging) return;
     const { x, y } = getCanvasPos(e);
 
@@ -88,6 +92,36 @@ export default function PDFViewer({
     setTextInput(null);
   }, [textInput, currentPage, onAddAnnotation, zoom]);
 
+  const handleEditSubmit = useCallback(() => {
+    if (editInput) {
+      // White-out rectangle
+      onAddAnnotation({
+        id: Date.now(),
+        type: 'whiteout',
+        pageNum: currentPage,
+        x: editInput.x,
+        y: editInput.y,
+        width: editInput.width,
+        height: editInput.height,
+        scale: zoom,
+      });
+      // Replacement text (if any)
+      if (editInput.text.trim()) {
+        onAddAnnotation({
+          id: Date.now() + 1,
+          type: 'text',
+          pageNum: currentPage,
+          x: editInput.x + 4,
+          y: editInput.y + 2,
+          text: editInput.text,
+          fontSize: Math.min(16, Math.max(10, Math.round(editInput.height * 0.6))),
+          scale: zoom,
+        });
+      }
+    }
+    setEditInput(null);
+  }, [editInput, currentPage, onAddAnnotation, zoom]);
+
   // --- Mouse handlers: crop, highlight, draw, drag ---
   const handleMouseDown = useCallback((e) => {
     if (!canvasRef.current) return;
@@ -101,6 +135,8 @@ export default function PDFViewer({
       setRedactStart({ x, y }); setRedactRect(null);
     } else if (activeTool === 'draw') {
       setDrawingPoints([{ x, y }]);
+    } else if (activeTool === 'edit') {
+      setEditStart({ x, y }); setEditRect(null);
     }
   }, [activeTool, getCanvasPos]);
 
@@ -125,6 +161,11 @@ export default function PDFViewer({
       });
     } else if (activeTool === 'draw' && drawingPoints) {
       setDrawingPoints(prev => [...prev, { x, y }]);
+    } else if (activeTool === 'edit' && editStart) {
+      setEditRect({
+        x: Math.min(editStart.x, x), y: Math.min(editStart.y, y),
+        width: Math.abs(x - editStart.x), height: Math.abs(y - editStart.y),
+      });
     } else if (dragging) {
       onUpdateAnnotation(dragging.id, {
         x: (x - dragging.offsetX),
@@ -182,6 +223,13 @@ export default function PDFViewer({
       });
     }
     setDrawingPoints(null);
+
+    // Finish edit (whiteout area → show text input)
+    if (activeTool === 'edit' && editRect && editRect.width > 5 && editRect.height > 5) {
+      setEditInput({ x: editRect.x, y: editRect.y, width: editRect.width, height: editRect.height, text: '' });
+      setEditRect(null);
+    }
+    setEditStart(null);
 
     setDragging(null);
   }, [activeTool, highlightRect, redactRect, drawingPoints, currentPage, onAddAnnotation, zoom]);
@@ -303,6 +351,10 @@ export default function PDFViewer({
                   width: ann.width * sx,
                   height: ann.height * sx,
                 } : {}),
+                ...(ann.type === 'whiteout' ? {
+                  width: ann.width * sx,
+                  height: ann.height * sx,
+                } : {}),
               }}
               onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
             >
@@ -363,6 +415,49 @@ export default function PDFViewer({
               height: redactRect.height,
             }}
           />
+        )}
+
+        {/* Live edit (whiteout) preview */}
+        {activeTool === 'edit' && editRect && (
+          <div
+            className="edit-overlay"
+            style={{
+              left: editRect.x,
+              top: editRect.y,
+              width: editRect.width,
+              height: editRect.height,
+            }}
+          />
+        )}
+
+        {/* Edit text input (after whiteout drawn) */}
+        {editInput && (
+          <div
+            className="edit-input-overlay"
+            style={{
+              left: editInput.x,
+              top: editInput.y,
+              width: editInput.width,
+              height: editInput.height,
+            }}
+          >
+            <input
+              type="text"
+              autoFocus
+              value={editInput.text}
+              onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleEditSubmit();
+                if (e.key === 'Escape') setEditInput(null);
+              }}
+              onBlur={handleEditSubmit}
+              placeholder="Replacement text (optional)..."
+              style={{
+                width: '100%',
+                height: '100%',
+              }}
+            />
+          </div>
         )}
 
         {/* Inline text input */}

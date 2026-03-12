@@ -61,8 +61,12 @@ export async function rotatePage(pdfDoc, pageIndex, angle) {
   return refreshRender(pdfDoc);
 }
 
-export async function addBlankPage(pdfDoc) {
-  pdfDoc.addPage();
+export async function addBlankPage(pdfDoc, atIndex) {
+  if (atIndex !== undefined && atIndex >= 0) {
+    pdfDoc.insertPage(atIndex);
+  } else {
+    pdfDoc.addPage();
+  }
   return refreshRender(pdfDoc);
 }
 
@@ -131,6 +135,19 @@ export async function embedAnnotations(currentBytes, annotations) {
         width: pdfW,
         height: pdfH,
         color: rgb(0, 0, 0),
+        opacity: 1,
+      });
+    } else if (ann.type === 'whiteout') {
+      const pdfX = ann.x / scale;
+      const pdfW = ann.width / scale;
+      const pdfH = ann.height / scale;
+      const pdfY = pageHeight - (ann.y / scale) - pdfH;
+      page.drawRectangle({
+        x: pdfX,
+        y: pdfY,
+        width: pdfW,
+        height: pdfH,
+        color: rgb(1, 1, 1),
         opacity: 1,
       });
     } else if (ann.type === 'drawing') {

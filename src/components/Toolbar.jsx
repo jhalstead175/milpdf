@@ -2,7 +2,7 @@ import {
   FolderOpen, Save, Printer, Undo2, Redo2, FilePlus, Trash2,
   RotateCw, FileStack, Scissors, MousePointer2, Type, Highlighter,
   Pencil, PenTool, ShieldOff, Crop, Droplets, FileText,
-  ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
+  ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenLine,
 } from 'lucide-react';
 
 const IC = { size: 15, strokeWidth: 1.8 };
@@ -46,8 +46,8 @@ export default function Toolbar({
       <div className="toolbar-divider" />
 
       <div className="toolbar-group">
-        <button onClick={onAddBlank} disabled={!hasDoc} title="Add Blank Page">
-          <FilePlus {...IC} /> Page
+        <button onClick={onAddBlank} disabled={!hasDoc} title="Insert Blank Page">
+          <FilePlus {...IC} /> Insert
         </button>
         <button onClick={onDeletePage} disabled={!hasDoc || numPages <= 1} title="Delete Current Page (Del)">
           <Trash2 {...IC} />
@@ -73,6 +73,7 @@ export default function Toolbar({
         <ToolBtn name="signature" Icon={PenTool} label="Sign" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
         <ToolBtn name="redact" Icon={ShieldOff} label="Redact" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
         <ToolBtn name="crop" Icon={Crop} label="Crop" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
+        <ToolBtn name="edit" Icon={PenLine} label="Edit" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
       </div>
 
       <div className="toolbar-divider" />

@@ -563,3 +563,82 @@ html.editor-active #root {
     transform: rotate(360deg);
   }
 }
+
+/* ===== Thin Scrollbars ===== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #45475a transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #45475a;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #585b70;
+}
+
+/* ===== Whiteout Annotation ===== */
+.annotation-whiteout {
+  background: #fff;
+  border: 1px dashed transparent;
+}
+
+.annotation-whiteout:hover {
+  border-color: #89b4fa;
+}
+
+/* ===== Edit Overlay (in-progress drag) ===== */
+.edit-overlay {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.7);
+  border: 2px dashed #89b4fa;
+  pointer-events: none;
+}
+
+/* ===== Edit Input Overlay ===== */
+.edit-input-overlay {
+  position: absolute;
+}
+
+.edit-input-overlay input {
+  border: 2px solid #34d399;
+  border-radius: 0;
+  padding: 2px 4px;
+  font-family: Helvetica, Arial, sans-serif;
+  background: #fff;
+  color: #000;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.pdf-canvas.tool-edit {
+  cursor: crosshair;
+}
+
+/* ===== Insert Page Dialog ===== */
+.insert-dialog {
+  text-align: center;
+  min-width: 320px;
+}
+
+.insert-options {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 20px 0 12px;
+}
+
+.insert-options .btn-primary {
+  flex: 1;
+}
