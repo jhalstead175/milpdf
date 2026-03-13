@@ -720,6 +720,8 @@ const runDD214Analysis = useCallback(async () => {
         watermarkText={watermarkText}
         onSplit={handleSplit}
         onImagesToPdf={handleImagesToPdf}
+        onZOrder={handleZOrder}
+        canZOrder={selectionIds.length > 0}
       />
 
       {activeFormProfile && (

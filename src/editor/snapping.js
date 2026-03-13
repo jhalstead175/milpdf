@@ -1,9 +1,13 @@
-const SNAP_THRESHOLD_PDF = 4;
+const SNAP_PX = 6;
 
-export function snapPosition(candidatePdfX, candidatePdfY, candidateW, candidateH, otherObjects) {
+export function snapPosition(candidatePdfX, candidatePdfY, candidateW, candidateH, otherObjects, zoom = 1) {
   let snapX = candidatePdfX;
   let snapY = candidatePdfY;
-  const guides = [];
+  let bestDX = null;
+  let bestDY = null;
+  let guideX = null;
+  let guideY = null;
+  const threshold = SNAP_PX / Math.max(zoom, 0.01);
 
   for (const obj of otherObjects) {
     const edges = {
@@ -28,9 +32,10 @@ export function snapPosition(candidatePdfX, candidatePdfY, candidateW, candidate
       ['right', 'right'], ['midX', 'midX'],
     ];
     for (const [ce, oe] of xPairs) {
-      if (Math.abs(candidateEdges[ce] - edges[oe]) < SNAP_THRESHOLD_PDF) {
-        snapX = edges[oe] - (candidateEdges[ce] - candidatePdfX);
-        guides.push({ axis: 'x', pdfX: edges[oe] });
+      const delta = candidateEdges[ce] - edges[oe];
+      if (Math.abs(delta) < threshold && (bestDX === null || Math.abs(delta) < Math.abs(bestDX))) {
+        bestDX = delta;
+        guideX = edges[oe];
       }
     }
 
@@ -39,12 +44,20 @@ export function snapPosition(candidatePdfX, candidatePdfY, candidateW, candidate
       ['top', 'top'], ['midY', 'midY'],
     ];
     for (const [ce, oe] of yPairs) {
-      if (Math.abs(candidateEdges[ce] - edges[oe]) < SNAP_THRESHOLD_PDF) {
-        snapY = edges[oe] - (candidateEdges[ce] - candidatePdfY);
-        guides.push({ axis: 'y', pdfY: edges[oe] });
+      const delta = candidateEdges[ce] - edges[oe];
+      if (Math.abs(delta) < threshold && (bestDY === null || Math.abs(delta) < Math.abs(bestDY))) {
+        bestDY = delta;
+        guideY = edges[oe];
       }
     }
   }
+
+  if (bestDX !== null) snapX = candidatePdfX - bestDX;
+  if (bestDY !== null) snapY = candidatePdfY - bestDY;
+
+  const guides = [];
+  if (guideX !== null) guides.push({ axis: 'x', pdfX: guideX });
+  if (guideY !== null) guides.push({ axis: 'y', pdfY: guideY });
 
   return { snapX, snapY, guides };
 }

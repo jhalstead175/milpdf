@@ -3,6 +3,7 @@ import {
   RotateCw, FileStack, Scissors, MousePointer2, Type, Highlighter,
   Pencil, PenTool, ShieldOff, Crop, Droplets, FileText,
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenLine, ImagePlus,
+  ChevronsUp, ChevronsDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 
 const IC = { size: 15, strokeWidth: 1.8 };
@@ -13,6 +14,7 @@ export default function Toolbar({
   zoom, onZoomChange, hasDoc, currentPage, numPages,
   onPageChange, onUndo, onRedo, canUndo, canRedo,
   onPrint, onWatermark, onSplit, onImagesToPdf, watermarkText,
+  onZOrder, canZOrder,
 }) {
   return (
     <div className="toolbar">
@@ -74,6 +76,23 @@ export default function Toolbar({
         <ToolBtn name="redact" Icon={ShieldOff} label="Redact" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
         <ToolBtn name="crop" Icon={Crop} label="Crop" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
         <ToolBtn name="edit" Icon={PenLine} label="Edit" activeTool={activeTool} onToolChange={onToolChange} hasDoc={hasDoc} />
+      </div>
+
+      <div className="toolbar-divider" />
+
+      <div className="toolbar-group">
+        <button onClick={() => onZOrder('front')} disabled={!hasDoc || !canZOrder} title="Bring to front">
+          <ChevronsUp {...IC} />
+        </button>
+        <button onClick={() => onZOrder('forward')} disabled={!hasDoc || !canZOrder} title="Bring forward">
+          <ArrowUp {...IC} />
+        </button>
+        <button onClick={() => onZOrder('backward')} disabled={!hasDoc || !canZOrder} title="Send backward">
+          <ArrowDown {...IC} />
+        </button>
+        <button onClick={() => onZOrder('back')} disabled={!hasDoc || !canZOrder} title="Send to back">
+          <ChevronsDown {...IC} />
+        </button>
       </div>
 
       <div className="toolbar-divider" />

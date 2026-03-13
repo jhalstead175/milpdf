@@ -351,7 +351,7 @@ export default function PDFViewer({
       const otherObjects = visibleObjects.filter(o => !dragState.ids.includes(o.id));
       const candidateX = primary.pdfX + dx;
       const candidateY = primary.pdfY - dy;
-      const snap = snapPosition(candidateX, candidateY, primary.width, primary.height, otherObjects);
+      const snap = snapPosition(candidateX, candidateY, primary.width, primary.height, otherObjects, zoom);
       const snappedDx = snap.snapX - primary.pdfX;
       const snappedDy = snap.snapY - primary.pdfY;
       setSnapGuides(snapGuidesToScreen(snap.guides, zoom, pdfPageHeight));
