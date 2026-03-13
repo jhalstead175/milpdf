@@ -1,282 +1,144 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { FileSearch } from 'lucide-react';
 import { renderPageToCanvas } from '../utils/pdfUtils';
+import { ToolManager } from '../editor/tools/ToolManager.js';
+import { pdfRectToScreen } from '../editor/coordinates.js';
 
+/**
+ * PDFViewer — MilPDF 2.0
+ *
+ * Rendering: PDF.js → <canvas>
+ * Objects:   EditorObjects (PDF-space coords) rendered as HTML overlays
+ * Events:    routed through ToolManager — no inline tool branching here
+ */
 export default function PDFViewer({
   renderDoc, currentPage, zoom, activeTool,
-  annotations, onAddAnnotation, onDeleteAnnotation, onUpdateAnnotation,
-  signatureDataUrl, onRequestSignature,
-  onCropApply, onCropCancel,
-  onDropFile, watermarkText,
+  objects,              // EditorObject[] — all pages (scene graph flat array)
+  onAddObject,
+  onDeleteObject,
+  onUpdateObject,
+  signatureDataUrl,
+  onRequestSignature,
+  onCropApply,
+  onCropCancel,
+  onDropFile,
+  watermarkText,
 }) {
-  const canvasRef = useRef(null);
+  const canvasRef    = useRef(null);
   const containerRef = useRef(null);
-  const [textInput, setTextInput] = useState(null);
-  const [cropRect, setCropRect] = useState(null);
-  const [cropStart, setCropStart] = useState(null);
-  const [highlightRect, setHighlightRect] = useState(null);
-  const [highlightStart, setHighlightStart] = useState(null);
-  const [redactRect, setRedactRect] = useState(null);
-  const [redactStart, setRedactStart] = useState(null);
-  const [drawingPoints, setDrawingPoints] = useState(null);
-  const [dragging, setDragging] = useState(null); // { id, offsetX, offsetY }
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [editRect, setEditRect] = useState(null);
-  const [editStart, setEditStart] = useState(null);
-  const [editInput, setEditInput] = useState(null); // { x, y, width, height, text }
+  const pageHeightRef = useRef(792); // PDF points; updated after each render
 
-  // Render the current page
+  // Preview state: live tool feedback (rect outlines, drawing path, input overlays, etc.)
+  const [toolPreview, setToolPreview] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // ── Mutable context ref that ToolManager reads on every event ──────────────
+  const ctxRef = useRef({});
+
+  // Build the ToolManager once
+  const toolManager = useRef(null);
+  if (!toolManager.current) {
+    toolManager.current = new ToolManager(ctxRef);
+  }
+
+  // Update context every render so tools always see fresh values
+  const pageObjects = useMemo(
+    () => objects.filter(o => o.page === currentPage),
+    [objects, currentPage]
+  );
+
+  ctxRef.current = {
+    page: currentPage,
+    zoom,
+    get pageHeight() { return pageHeightRef.current; },
+    signatureDataUrl,
+    getObjects: (page) => objects.filter(o => o.page === page),
+    getPreview: () => toolPreview,
+
+    addObject:    (obj) => onAddObject(obj),
+    deleteObject: (id)  => onDeleteObject(id),
+    updateObject: (id, updates) => onUpdateObject(id, updates),
+
+    setPreview:   (state) => setToolPreview(state),
+    clearPreview: ()      => setToolPreview(null),
+
+    requestSignature: () => onRequestSignature(),
+    applyCrop: (cropBox) => onCropApply(cropBox),
+  };
+
+  // ── Render PDF page to canvas ──────────────────────────────────────────────
   useEffect(() => {
     if (renderDoc && canvasRef.current) {
       renderPageToCanvas(renderDoc, currentPage, canvasRef.current, zoom)
+        .then(({ height }) => {
+          // height is canvas px; divide by zoom to get PDF points
+          pageHeightRef.current = height / zoom;
+        })
         .catch(console.error);
     }
   }, [renderDoc, currentPage, zoom]);
 
-  // Reset tool-specific state when tool changes
+  // ── Sync active tool to ToolManager ───────────────────────────────────────
   useEffect(() => {
-    if (activeTool !== 'crop') { setCropRect(null); setCropStart(null); }
-    if (activeTool !== 'highlight') { setHighlightRect(null); setHighlightStart(null); }
-    if (activeTool !== 'redact') { setRedactRect(null); setRedactStart(null); }
-    if (activeTool !== 'draw') { setDrawingPoints(null); }
-    if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
+    toolManager.current.setTool(activeTool);
   }, [activeTool]);
 
-  const pageAnnotations = annotations.filter(a => a.pageNum === currentPage);
-
+  // ── Canvas coordinate helper ───────────────────────────────────────────────
   const getCanvasPos = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
 
-  // --- Canvas click (text / signature placement) ---
-  const handleCanvasClick = useCallback((e) => {
-    if (!canvasRef.current) return;
-    if (activeTool === 'highlight' || activeTool === 'redact' || activeTool === 'crop' || activeTool === 'draw' || activeTool === 'edit') return;
-    if (dragging) return;
-    const { x, y } = getCanvasPos(e);
-
-    if (activeTool === 'text') {
-      setTextInput({ x, y, text: '' });
-    } else if (activeTool === 'signature') {
-      if (!signatureDataUrl) {
-        onRequestSignature();
-        return;
-      }
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'signature',
-        pageNum: currentPage,
-        x, y,
-        width: 200,
-        height: 80,
-        dataUrl: signatureDataUrl,
-        scale: zoom,
-      });
-    }
-  }, [activeTool, currentPage, signatureDataUrl, onRequestSignature, onAddAnnotation, zoom, getCanvasPos, dragging]);
-
-  const handleTextSubmit = useCallback(() => {
-    if (textInput && textInput.text.trim()) {
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'text',
-        pageNum: currentPage,
-        x: textInput.x,
-        y: textInput.y,
-        text: textInput.text,
-        fontSize: 16,
-        scale: zoom,
-      });
-    }
-    setTextInput(null);
-  }, [textInput, currentPage, onAddAnnotation, zoom]);
-
-  const handleEditSubmit = useCallback(() => {
-    if (editInput) {
-      // White-out rectangle
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'whiteout',
-        pageNum: currentPage,
-        x: editInput.x,
-        y: editInput.y,
-        width: editInput.width,
-        height: editInput.height,
-        scale: zoom,
-      });
-      // Replacement text (if any)
-      if (editInput.text.trim()) {
-        onAddAnnotation({
-          id: Date.now() + 1,
-          type: 'text',
-          pageNum: currentPage,
-          x: editInput.x + 4,
-          y: editInput.y + 2,
-          text: editInput.text,
-          fontSize: Math.min(16, Math.max(10, Math.round(editInput.height * 0.6))),
-          scale: zoom,
-        });
-      }
-    }
-    setEditInput(null);
-  }, [editInput, currentPage, onAddAnnotation, zoom]);
-
-  // --- Mouse handlers: crop, highlight, draw, drag ---
+  // ── Mouse event routing ────────────────────────────────────────────────────
   const handleMouseDown = useCallback((e) => {
     if (!canvasRef.current) return;
-    const { x, y } = getCanvasPos(e);
-
-    if (activeTool === 'crop') {
-      setCropStart({ x, y }); setCropRect(null);
-    } else if (activeTool === 'highlight') {
-      setHighlightStart({ x, y }); setHighlightRect(null);
-    } else if (activeTool === 'redact') {
-      setRedactStart({ x, y }); setRedactRect(null);
-    } else if (activeTool === 'draw') {
-      setDrawingPoints([{ x, y }]);
-    } else if (activeTool === 'edit') {
-      setEditStart({ x, y }); setEditRect(null);
-    }
-  }, [activeTool, getCanvasPos]);
+    toolManager.current.onMouseDown(e, getCanvasPos(e));
+  }, [getCanvasPos]);
 
   const handleMouseMove = useCallback((e) => {
     if (!canvasRef.current) return;
-    const { x, y } = getCanvasPos(e);
+    toolManager.current.onMouseMove(e, getCanvasPos(e));
+  }, [getCanvasPos]);
 
-    if (activeTool === 'crop' && cropStart) {
-      setCropRect({
-        x: Math.min(cropStart.x, x), y: Math.min(cropStart.y, y),
-        width: Math.abs(x - cropStart.x), height: Math.abs(y - cropStart.y),
-      });
-    } else if (activeTool === 'highlight' && highlightStart) {
-      setHighlightRect({
-        x: Math.min(highlightStart.x, x), y: Math.min(highlightStart.y, y),
-        width: Math.abs(x - highlightStart.x), height: Math.abs(y - highlightStart.y),
-      });
-    } else if (activeTool === 'redact' && redactStart) {
-      setRedactRect({
-        x: Math.min(redactStart.x, x), y: Math.min(redactStart.y, y),
-        width: Math.abs(x - redactStart.x), height: Math.abs(y - redactStart.y),
-      });
-    } else if (activeTool === 'draw' && drawingPoints) {
-      setDrawingPoints(prev => [...prev, { x, y }]);
-    } else if (activeTool === 'edit' && editStart) {
-      setEditRect({
-        x: Math.min(editStart.x, x), y: Math.min(editStart.y, y),
-        width: Math.abs(x - editStart.x), height: Math.abs(y - editStart.y),
-      });
-    } else if (dragging) {
-      onUpdateAnnotation(dragging.id, {
-        x: (x - dragging.offsetX),
-        y: (y - dragging.offsetY),
-        scale: zoom,
-      });
-    }
-  }, [activeTool, cropStart, highlightStart, redactStart, drawingPoints, dragging, getCanvasPos, onUpdateAnnotation, zoom]);
+  const handleMouseUp = useCallback((e) => {
+    toolManager.current.onMouseUp(e, getCanvasPos(e));
+  }, [getCanvasPos]);
 
-  const handleMouseUp = useCallback(() => {
-    setCropStart(null);
+  const handleCanvasClick = useCallback((e) => {
+    if (!canvasRef.current) return;
+    // Skip click for drag-type tools (handled via mousedown/up)
+    if (['highlight', 'redact', 'crop', 'draw', 'edit'].includes(activeTool)) return;
+    toolManager.current.onClick(e, getCanvasPos(e));
+  }, [activeTool, getCanvasPos]);
 
-    // Finish highlight
-    if (activeTool === 'highlight' && highlightRect && highlightRect.width > 5 && highlightRect.height > 5) {
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'highlight',
-        pageNum: currentPage,
-        x: highlightRect.x,
-        y: highlightRect.y,
-        width: highlightRect.width,
-        height: highlightRect.height,
-        scale: zoom,
-      });
-      setHighlightRect(null);
-    }
-    setHighlightStart(null);
+  // ── Keyboard: Delete selected object ──────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Delete' && activeTool === 'select' && !e.target.closest('input,textarea')) {
+        toolManager.current.deleteSelected();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeTool]);
 
-    // Finish redaction
-    if (activeTool === 'redact' && redactRect && redactRect.width > 5 && redactRect.height > 5) {
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'redact',
-        pageNum: currentPage,
-        x: redactRect.x,
-        y: redactRect.y,
-        width: redactRect.width,
-        height: redactRect.height,
-        scale: zoom,
-      });
-      setRedactRect(null);
-    }
-    setRedactStart(null);
-
-    // Finish drawing
-    if (activeTool === 'draw' && drawingPoints && drawingPoints.length > 2) {
-      onAddAnnotation({
-        id: Date.now(),
-        type: 'drawing',
-        pageNum: currentPage,
-        points: drawingPoints,
-        color: '#000000',
-        lineWidth: 2,
-        scale: zoom,
-      });
-    }
-    setDrawingPoints(null);
-
-    // Finish edit (whiteout area → show text input)
-    if (activeTool === 'edit' && editRect && editRect.width > 5 && editRect.height > 5) {
-      setEditInput({ x: editRect.x, y: editRect.y, width: editRect.width, height: editRect.height, text: '' });
-      setEditRect(null);
-    }
-    setEditStart(null);
-
-    setDragging(null);
-  }, [activeTool, highlightRect, redactRect, drawingPoints, currentPage, onAddAnnotation, zoom]);
-
-  const handleCropApply = useCallback(() => {
-    if (cropRect && cropRect.width > 10 && cropRect.height > 10) {
-      onCropApply({ ...cropRect, scale: zoom });
-      setCropRect(null);
-    }
-  }, [cropRect, onCropApply, zoom]);
-
-  // --- Drag annotation to reposition ---
-  const handleAnnotationMouseDown = useCallback((e, ann) => {
-    if (activeTool !== 'select') return;
-    e.stopPropagation();
-    const rect = canvasRef.current.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const annScreenX = ann.x * (zoom / ann.scale);
-    const annScreenY = ann.y * (zoom / ann.scale);
-    setDragging({
-      id: ann.id,
-      offsetX: mx - annScreenX,
-      offsetY: my - annScreenY,
-    });
-  }, [activeTool, zoom]);
-
-  // --- Drag-and-drop file ---
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
-
+  // ── Drag-and-drop file ─────────────────────────────────────────────────────
+  const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragOver(true); }, []);
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      onDropFile(file);
-    }
+    if (file && file.type === 'application/pdf') onDropFile(file);
   }, [onDropFile]);
 
-  // --- Empty state ---
+  // ── Object screen bounds helper ────────────────────────────────────────────
+  const objBounds = useCallback((obj) => {
+    const ph = pageHeightRef.current;
+    return pdfRectToScreen(obj.pdfX, obj.pdfY, Math.max(obj.width, 1), obj.height, ph, zoom);
+  }, [zoom]);
+
+  // ── Empty state ────────────────────────────────────────────────────────────
   if (!renderDoc) {
     return (
       <div
@@ -293,6 +155,14 @@ export default function PDFViewer({
       </div>
     );
   }
+
+  // Derived preview state values
+  const isRectPreview = toolPreview?.type === 'rect';
+  const isCropPreview = toolPreview?.type === 'crop';
+  const isPolyPreview = toolPreview?.type === 'polyline';
+  const isTextInput   = toolPreview?.type === 'text-input';
+  const isEditInput   = toolPreview?.type === 'edit-input';
+  const isSelected    = toolPreview?.type === 'selected';
 
   return (
     <div
@@ -315,195 +185,164 @@ export default function PDFViewer({
           className={`pdf-canvas tool-${activeTool}`}
         />
 
-        {/* Annotation overlays */}
-        {pageAnnotations.map(ann => {
-          const sx = zoom / ann.scale;
-          if (ann.type === 'drawing') {
+        {/* ── EditorObject overlays ─────────────────────────────────────── */}
+        {pageObjects.map(obj => {
+          const ph = pageHeightRef.current;
+
+          if (obj.type === 'drawing') {
+            const pts = (obj.pdfPoints || []).map(p => {
+              const { screenX, screenY } = { screenX: p.x * zoom, screenY: (ph - p.y) * zoom };
+              return `${screenX},${screenY}`;
+            });
             return (
-              <svg key={ann.id} className="annotation annotation-drawing" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <svg key={obj.id} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
                 <polyline
-                  points={ann.points.map(p => `${p.x * sx},${p.y * sx}`).join(' ')}
+                  points={pts.join(' ')}
                   fill="none"
-                  stroke={ann.color || '#000'}
-                  strokeWidth={ann.lineWidth || 2}
+                  stroke={obj.color || '#000'}
+                  strokeWidth={obj.lineWidth || 2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             );
           }
+
+          const { screenLeft, screenTop, screenWidth, screenHeight } = objBounds(obj);
+
           return (
             <div
-              key={ann.id}
-              className={`annotation annotation-${ann.type} ${activeTool === 'select' ? 'draggable' : ''}`}
+              key={obj.id}
+              className={`annotation annotation-${obj.type} ${activeTool === 'select' ? 'draggable' : ''}`}
               style={{
-                left: ann.x * sx,
-                top: ann.y * sx,
-                ...(ann.type === 'signature' ? {
-                  width: ann.width * sx,
-                  height: ann.height * sx,
-                } : {}),
-                ...(ann.type === 'highlight' ? {
-                  width: ann.width * sx,
-                  height: ann.height * sx,
-                } : {}),
-                ...(ann.type === 'redact' ? {
-                  width: ann.width * sx,
-                  height: ann.height * sx,
-                } : {}),
-                ...(ann.type === 'whiteout' ? {
-                  width: ann.width * sx,
-                  height: ann.height * sx,
-                } : {}),
+                left: screenLeft,
+                top:  screenTop,
+                width:  obj.width > 0 ? screenWidth : undefined,
+                height: obj.height > 0 ? screenHeight : undefined,
               }}
-              onMouseDown={(e) => handleAnnotationMouseDown(e, ann)}
+              onMouseDown={(e) => {
+                if (activeTool === 'select') {
+                  // Let ToolManager handle — just stop propagation to canvas
+                  e.stopPropagation();
+                  toolManager.current.onMouseDown(e, getCanvasPos(e));
+                }
+              }}
             >
-              {ann.type === 'text' && (
-                <span style={{ fontSize: `${(ann.fontSize || 16) * sx}px` }}>
-                  {ann.text}
+              {obj.type === 'text' && (
+                <span style={{ fontSize: `${(obj.fontSize || 16) * zoom}px`, whiteSpace: 'nowrap' }}>
+                  {obj.text}
                 </span>
               )}
-              {ann.type === 'signature' && (
-                <img src={ann.dataUrl} alt="Signature" draggable={false} />
+              {obj.type === 'signature' && (
+                <img src={obj.dataUrl} alt="Signature" draggable={false}
+                  style={{ width: '100%', height: '100%' }} />
               )}
               <button
                 className="annotation-delete"
-                onClick={(e) => { e.stopPropagation(); onDeleteAnnotation(ann.id); }}
+                onClick={(e) => { e.stopPropagation(); onDeleteObject(obj.id); }}
                 title="Remove"
-              >
-                ×
-              </button>
+              >×</button>
             </div>
           );
         })}
 
-        {/* Live freehand drawing */}
-        {activeTool === 'draw' && drawingPoints && drawingPoints.length > 1 && (
-          <svg className="drawing-live" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        {/* ── Selection handles (SelectTool) ────────────────────────────── */}
+        {isSelected && (() => {
+          const { screenLeft: sl, screenTop: st, screenWidth: sw, screenHeight: sh } = toolPreview;
+          // Only show resize handles if the object has dimensions
+          const selObj = pageObjects.find(o => o.id === toolPreview.id);
+          const canResize = selObj && selObj.width > 0 && selObj.height > 0;
+          const handles = canResize
+            ? [['tl', sl, st], ['tr', sl + sw, st], ['bl', sl, st + sh], ['br', sl + sw, st + sh]]
+            : [];
+          return (
+            <>
+              <div className="selection-box" style={{ left: sl, top: st, width: sw, height: sh }} />
+              {handles.map(([name, hx, hy]) => (
+                <div key={name} className={`resize-handle resize-handle-${name}`}
+                  style={{ left: hx - 5, top: hy - 5 }} />
+              ))}
+            </>
+          );
+        })()}
+
+        {/* ── Live rect preview (highlight, redact, whiteout) ──────────── */}
+        {isRectPreview && (
+          <div
+            className={`${toolPreview.style}-overlay`}
+            style={{ left: toolPreview.x, top: toolPreview.y, width: toolPreview.w, height: toolPreview.h }}
+          />
+        )}
+
+        {/* ── Live freehand drawing ─────────────────────────────────────── */}
+        {isPolyPreview && toolPreview.points.length > 1 && (
+          <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
             <polyline
-              points={drawingPoints.map(p => `${p.x},${p.y}`).join(' ')}
-              fill="none"
-              stroke="#000"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              points={toolPreview.points.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="none" stroke="#000" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
             />
           </svg>
         )}
 
-        {/* Live highlight preview */}
-        {activeTool === 'highlight' && highlightRect && (
-          <div
-            className="highlight-overlay"
-            style={{
-              left: highlightRect.x,
-              top: highlightRect.y,
-              width: highlightRect.width,
-              height: highlightRect.height,
-            }}
-          />
+        {/* ── Crop rectangle ────────────────────────────────────────────── */}
+        {isCropPreview && (
+          <>
+            <div className="crop-overlay" style={{
+              left: toolPreview.x, top: toolPreview.y,
+              width: toolPreview.w, height: toolPreview.h,
+            }} />
+            <div className="crop-actions" style={{
+              left: toolPreview.x,
+              top: toolPreview.y + toolPreview.h + 8,
+            }}>
+              <button onClick={() => toolManager.current.applyCrop(toolPreview)}>Apply Crop</button>
+              <button onClick={() => { setToolPreview(null); onCropCancel(); }}>Cancel</button>
+            </div>
+          </>
         )}
 
-        {/* Live redaction preview */}
-        {activeTool === 'redact' && redactRect && (
-          <div
-            className="redact-overlay"
-            style={{
-              left: redactRect.x,
-              top: redactRect.y,
-              width: redactRect.width,
-              height: redactRect.height,
-            }}
-          />
-        )}
-
-        {/* Live edit (whiteout) preview */}
-        {activeTool === 'edit' && editRect && (
-          <div
-            className="edit-overlay"
-            style={{
-              left: editRect.x,
-              top: editRect.y,
-              width: editRect.width,
-              height: editRect.height,
-            }}
-          />
-        )}
-
-        {/* Edit text input (after whiteout drawn) */}
-        {editInput && (
-          <div
-            className="edit-input-overlay"
-            style={{
-              left: editInput.x,
-              top: editInput.y,
-              width: editInput.width,
-              height: editInput.height,
-            }}
-          >
+        {/* ── Edit (whiteout) text input ────────────────────────────────── */}
+        {isEditInput && (
+          <div className="edit-input-overlay" style={{
+            left: toolPreview.x, top: toolPreview.y,
+            width: toolPreview.w, height: toolPreview.h,
+          }}>
             <input
               type="text"
               autoFocus
-              value={editInput.text}
-              onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
+              value={toolPreview.text}
+              onChange={(e) => setToolPreview({ ...toolPreview, text: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleEditSubmit();
-                if (e.key === 'Escape') setEditInput(null);
+                if (e.key === 'Enter') toolManager.current.submitEdit(toolPreview);
+                if (e.key === 'Escape') setToolPreview(null);
               }}
-              onBlur={handleEditSubmit}
+              onBlur={() => toolManager.current.submitEdit(toolPreview)}
               placeholder="Replacement text (optional)..."
-              style={{
-                width: '100%',
-                height: '100%',
-              }}
+              style={{ width: '100%', height: '100%' }}
             />
           </div>
         )}
 
-        {/* Inline text input */}
-        {textInput && (
-          <div className="text-input-overlay" style={{ left: textInput.x, top: textInput.y }}>
+        {/* ── Text input overlay ────────────────────────────────────────── */}
+        {isTextInput && (
+          <div className="text-input-overlay" style={{ left: toolPreview.x, top: toolPreview.y }}>
             <input
               type="text"
               autoFocus
-              value={textInput.text}
-              onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+              value={toolPreview.text}
+              onChange={(e) => setToolPreview({ ...toolPreview, text: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleTextSubmit();
-                if (e.key === 'Escape') setTextInput(null);
+                if (e.key === 'Enter') toolManager.current.submitText(toolPreview.text);
+                if (e.key === 'Escape') setToolPreview(null);
               }}
-              onBlur={handleTextSubmit}
+              onBlur={() => toolManager.current.submitText(toolPreview.text)}
               placeholder="Type text..."
             />
           </div>
         )}
 
-        {/* Crop rectangle overlay */}
-        {activeTool === 'crop' && cropRect && (
-          <>
-            <div
-              className="crop-overlay"
-              style={{
-                left: cropRect.x,
-                top: cropRect.y,
-                width: cropRect.width,
-                height: cropRect.height,
-              }}
-            />
-            <div
-              className="crop-actions"
-              style={{
-                left: cropRect.x,
-                top: cropRect.y + cropRect.height + 8,
-              }}
-            >
-              <button onClick={handleCropApply}>Apply Crop</button>
-              <button onClick={() => { setCropRect(null); onCropCancel(); }}>Cancel</button>
-            </div>
-          </>
-        )}
-
-        {/* Watermark overlay */}
+        {/* ── Watermark overlay ─────────────────────────────────────────── */}
         {watermarkText && (
           <div className="watermark-overlay">
             <span>{watermarkText}</span>
