@@ -440,6 +440,16 @@ const runDD214Analysis = useCallback(async () => {
     }
   }, [renderDoc, profile, handleProfileSave]);
 
+  // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
+  const handleAddObject = useCallback((obj) => {
+    annHistory.set(prev => [...prev, obj]);
+  }, [annHistory]);
+
+  const handleAddObjects = useCallback((newObjects) => {
+    if (!newObjects || newObjects.length === 0) return;
+    annHistory.set(prev => [...prev, ...newObjects]);
+  }, [annHistory]);
+
   const runAutoRedact = useCallback(async () => {
     if (!renderDoc) return;
     setLoading(true);
@@ -487,16 +497,6 @@ const runDD214Analysis = useCallback(async () => {
       setLoading(false);
       e.target.value = '';
     }
-  }, [annHistory]);
-
-  // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
-  const handleAddObject = useCallback((obj) => {
-    annHistory.set(prev => [...prev, obj]);
-  }, [annHistory]);
-
-  const handleAddObjects = useCallback((newObjects) => {
-    if (!newObjects || newObjects.length === 0) return;
-    annHistory.set(prev => [...prev, ...newObjects]);
   }, [annHistory]);
 
   const handleDeleteObject = useCallback((id) => {
