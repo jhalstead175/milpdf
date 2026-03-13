@@ -33,7 +33,11 @@ import './App.css';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 
 function App() {
-  const [view, setView] = useState(isElectron ? 'editor' : 'landing');
+  const [view, setView] = useState('landing');
+
+  useEffect(() => {
+    if (isElectron) setView('editor');
+  }, [isElectron]);
 
   // When switching to editor, lock body scroll and reset scroll position
   useEffect(() => {
