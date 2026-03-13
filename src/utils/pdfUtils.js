@@ -93,9 +93,20 @@ export async function imagesToPdf(imageFiles) {
       const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
       img = await pdfDoc.embedPng(pngBytes);
     }
-    const { width, height } = img.scale(1);
-    const page = pdfDoc.addPage([width, height]);
-    page.drawImage(img, { x: 0, y: 0, width, height });
+    const { width: imgW, height: imgH } = img.scale(1);
+    // Standard US Letter page: 8.5 x 11 inches at 72 pts/in
+    const pageW = 612;
+    const pageH = 792;
+    const scale = Math.min(1, pageW / imgW, pageH / imgH);
+    const drawW = imgW * scale;
+    const drawH = imgH * scale;
+    const page = pdfDoc.addPage([pageW, pageH]);
+    page.drawImage(img, {
+      x: (pageW - drawW) / 2,
+      y: (pageH - drawH) / 2,
+      width: drawW,
+      height: drawH,
+    });
   }
   const savedBytes = await pdfDoc.save();
   const renderDoc = await getRenderDoc(savedBytes);
