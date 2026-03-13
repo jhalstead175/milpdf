@@ -229,6 +229,74 @@ export async function embedAnnotations(currentBytes, annotations) {
   return pdfDoc.save();
 }
 
+/**
+ * Embed EditorObjects (MilPDF 2.0 format) into a PDF.
+ * Objects store PDF-space coordinates directly — no conversion needed.
+ */
+export async function embedEditorObjects(currentBytes, objects) {
+  const pdfDoc = await PDFDocument.load(currentBytes);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const pages = pdfDoc.getPages();
+
+  for (const obj of objects) {
+    const pageIndex = obj.page - 1;
+    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+    const page = pages[pageIndex];
+
+    if (obj.type === 'text') {
+      page.drawText(obj.text || '', {
+        x: obj.pdfX,
+        y: obj.pdfY,
+        size: obj.fontSize || 16,
+        font,
+        color: rgb(0, 0, 0),
+      });
+
+    } else if (obj.type === 'signature') {
+      const pngBytes = await fetch(obj.dataUrl).then(r => r.arrayBuffer());
+      const image = await pdfDoc.embedPng(pngBytes);
+      page.drawImage(image, {
+        x: obj.pdfX, y: obj.pdfY, width: obj.width, height: obj.height,
+      });
+
+    } else if (obj.type === 'highlight') {
+      page.drawRectangle({
+        x: obj.pdfX, y: obj.pdfY, width: obj.width, height: obj.height,
+        color: rgb(1, 0.92, 0.23), opacity: 0.35,
+      });
+
+    } else if (obj.type === 'redact') {
+      page.drawRectangle({
+        x: obj.pdfX, y: obj.pdfY, width: obj.width, height: obj.height,
+        color: rgb(0, 0, 0), opacity: 1,
+      });
+
+    } else if (obj.type === 'whiteout') {
+      page.drawRectangle({
+        x: obj.pdfX, y: obj.pdfY, width: obj.width, height: obj.height,
+        color: rgb(1, 1, 1), opacity: 1,
+      });
+
+    } else if (obj.type === 'drawing') {
+      const pts = obj.pdfPoints || [];
+      const colorMap =
+        obj.color === '#f38ba8' ? [0.95, 0.55, 0.66] :
+        obj.color === '#89b4fa' ? [0.54, 0.71, 0.98] :
+        [0, 0, 0];
+      for (let i = 1; i < pts.length; i++) {
+        page.drawLine({
+          start: { x: pts[i - 1].x, y: pts[i - 1].y },
+          end:   { x: pts[i].x,     y: pts[i].y },
+          thickness: obj.lineWidth || 2,
+          color: rgb(...colorMap),
+        });
+      }
+    }
+  }
+
+  return pdfDoc.save();
+}
+
 export async function cropPage(pdfDoc, pageIndex, cropBox) {
   const page = pdfDoc.getPages()[pageIndex];
   const pageHeight = page.getHeight();

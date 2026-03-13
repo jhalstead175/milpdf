@@ -8,9 +8,11 @@ import SignaturePad from './components/SignaturePad';
 import useHistory from './hooks/useHistory';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedAnnotations, cropPage,
+  addBlankPage, mergePdf, insertPdf, imagesToPdf,
+  embedAnnotations, embedEditorObjects, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
+import { isLegacyFormat } from './editor/EditorObject.js';
 import { convertPdfToWord } from './utils/wordExport';
 import './App.css';
 
@@ -45,6 +47,8 @@ function App() {
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
 
+  // Scene graph: flat array of EditorObjects (MilPDF 2.0 format)
+  // useHistory snapshots the entire array for undo/redo — same mechanism as before.
   const annHistory = useHistory([]);
 
   const fileInputRef = useRef(null);
@@ -135,13 +139,22 @@ function App() {
     e.target.value = '';
   }, [loadFile]);
 
+  // Choose correct embed function based on object format
+  const embedObjects = useCallback(async (bytes, objects) => {
+    if (objects.length === 0) return bytes;
+    if (isLegacyFormat(objects)) {
+      return embedAnnotations(bytes, objects);
+    }
+    return embedEditorObjects(bytes, objects);
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!pdfBytes) return;
     setLoading(true);
     try {
       let bytes = pdfBytes;
       if (annHistory.state.length > 0) {
-        bytes = await embedAnnotations(bytes, annHistory.state);
+        bytes = await embedObjects(bytes, annHistory.state);
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -159,7 +172,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, fileName, watermarkText]);
+  }, [pdfBytes, annHistory.state, fileName, watermarkText, embedObjects]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -238,8 +251,12 @@ function App() {
       setCurrentPage(Math.min(currentPage, result.pdfDoc.getPageCount()));
       annHistory.set(prev =>
         prev
-          .filter(a => a.pageNum !== currentPage)
-          .map(a => a.pageNum > currentPage ? { ...a, pageNum: a.pageNum - 1 } : a)
+          .filter(a => (a.page ?? a.pageNum) !== currentPage)
+          .map(a => {
+            const pg = a.page ?? a.pageNum;
+            if (pg <= currentPage) return a;
+            return 'page' in a ? { ...a, page: pg - 1 } : { ...a, pageNum: pg - 1 };
+          })
       );
     } catch (err) {
       alert('Failed to delete page: ' + err.message);
@@ -272,9 +289,11 @@ function App() {
       updateFromResult(result);
       setCurrentPage(toIndex + 1);
       annHistory.set(prev => prev.map(a => {
-        const oldPageIndex = a.pageNum - 1;
+        const oldPageIndex = (a.page ?? a.pageNum) - 1;
         const newPos = order.indexOf(oldPageIndex);
-        return { ...a, pageNum: newPos + 1 };
+        return 'page' in a
+          ? { ...a, page: newPos + 1 }
+          : { ...a, pageNum: newPos + 1 };
       }));
     } catch (err) {
       alert('Failed to reorder pages: ' + err.message);
@@ -323,7 +342,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (annHistory.state.length > 0) {
-        bytes = await embedAnnotations(bytes, annHistory.state);
+        bytes = await embedObjects(bytes, annHistory.state);
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -332,7 +351,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, watermarkText]);
+  }, [pdfBytes, annHistory.state, watermarkText, embedObjects]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -375,16 +394,16 @@ function App() {
     }
   }, [annHistory]);
 
-  // --- Annotations ---
-  const handleAddAnnotation = useCallback((annotation) => {
-    annHistory.set(prev => [...prev, annotation]);
+  // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
+  const handleAddObject = useCallback((obj) => {
+    annHistory.set(prev => [...prev, obj]);
   }, [annHistory]);
 
-  const handleDeleteAnnotation = useCallback((id) => {
+  const handleDeleteObject = useCallback((id) => {
     annHistory.set(prev => prev.filter(a => a.id !== id));
   }, [annHistory]);
 
-  const handleUpdateAnnotation = useCallback((id, updates) => {
+  const handleUpdateObject = useCallback((id, updates) => {
     annHistory.set(prev =>
       prev.map(a => a.id === id ? { ...a, ...updates } : a)
     );
@@ -491,10 +510,10 @@ function App() {
           currentPage={currentPage}
           zoom={zoom}
           activeTool={activeTool}
-          annotations={annHistory.state}
-          onAddAnnotation={handleAddAnnotation}
-          onDeleteAnnotation={handleDeleteAnnotation}
-          onUpdateAnnotation={handleUpdateAnnotation}
+          objects={annHistory.state}
+          onAddObject={handleAddObject}
+          onDeleteObject={handleDeleteObject}
+          onUpdateObject={handleUpdateObject}
           signatureDataUrl={signatureDataUrl}
           onRequestSignature={() => setShowSignaturePad(true)}
           onCropApply={handleCropApply}
