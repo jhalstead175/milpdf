@@ -37,7 +37,7 @@ function App() {
 
   useEffect(() => {
     if (isElectron) setView('editor');
-  }, [isElectron]);
+  }, []);
 
   // When switching to editor, lock body scroll and reset scroll position
   useEffect(() => {
@@ -391,7 +391,14 @@ function App() {
     }
   }, [renderDoc, fileName]);
 
-  const runDD214Analysis = useCallback(async () => {
+  
+
+  const handleProfileSave = useCallback((nextProfile) => {
+    const normalized = saveProfile(nextProfile);
+    setProfile(normalized);
+    setShowProfileModal(false);
+  }, []);
+const runDD214Analysis = useCallback(async () => {
     if (!renderDoc) return;
     setLoading(true);
     try {
@@ -539,12 +546,6 @@ function App() {
     handleAddObjects(duplicated);
     setSelectionIds(duplicated.map(o => o.id));
   }, [annHistory.state, selectedSet, handleAddObjects]);
-
-  const handleProfileSave = useCallback((nextProfile) => {
-    const normalized = saveProfile(nextProfile);
-    setProfile(normalized);
-    setShowProfileModal(false);
-  }, []);
 
   const handleAutoFill = useCallback(() => {
     if (!activeFormProfile) return;
