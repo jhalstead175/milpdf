@@ -680,7 +680,11 @@ export default function PDFViewer({
             <div
               key={obj.id}
               className={`annotation annotation-${obj.type} ${activeTool === 'select' ? 'draggable' : ''}`}
-
+              onMouseDown={(e) => {
+                if (activeTool !== 'select') return;
+                e.stopPropagation();
+                handleMouseDown(e);
+              }}
               style={style}
             >
               {obj.type === 'text' && (
