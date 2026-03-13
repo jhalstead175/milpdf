@@ -204,6 +204,14 @@ export const COMMAND_REGISTRY = [
     requiresDoc: true,
   },
   {
+    id: 'veteran.evidence.build',
+    label: 'Build Evidence Packet',
+    keywords: ['evidence', 'packet', 'va claim', 'bundle'],
+    category: 'Veteran',
+    icon: 'FileSearch',
+    execute: ({ setActiveWorkflow }) => setActiveWorkflow('evidence-builder'),
+  },
+  {
     id: 'veteran.dd214.parse',
     label: 'Analyze DD214',
     keywords: ['dd214', 'discharge', 'analyze', 'parse'],

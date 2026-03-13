@@ -21,6 +21,7 @@ import { scanForPii } from './veteran/autoRedact';
 import { parseDD214 } from './veteran/dd214Parser';
 import { loadProfile, saveProfile, normalizeProfile } from './veteran/profile';
 import { FORM_PROFILES, detectFormProfile, autofillScene } from './veteran/formProfiles';
+import EvidenceBuilder from './veteran/EvidenceBuilder';
 import {
   alignLeft, alignRight, alignTop, alignBottom,
   alignCenterH, alignCenterV,
@@ -61,11 +62,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectionIds, setSelectionIds] = useState([]);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [, setActiveWorkflow] = useState(null);
+  const [activeWorkflow, setActiveWorkflow] = useState(null);
   const [profile, setProfile] = useState(() => loadProfile());
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [formProfileKey, setFormProfileKey] = useState(null);
 
+  // Scene graph: flat array of EditorObjects (MilPDF 2.0 format)
+  // useHistory snapshots the entire array for undo/redo — same mechanism as before.
   const annHistory = useHistory([]);
   const [layers] = useState({
     base: { name: 'Base PDF', visible: true, locked: true },
@@ -475,9 +478,9 @@ function App() {
     }
   }, [annHistory]);
 
-  // --- Annotations ---
-  const handleAddAnnotation = useCallback((annotation) => {
-    annHistory.set(prev => [...prev, annotation]);
+  // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
+  const handleAddObject = useCallback((obj) => {
+    annHistory.set(prev => [...prev, obj]);
   }, [annHistory]);
 
   const handleAddObjects = useCallback((newObjects) => {
@@ -485,11 +488,11 @@ function App() {
     annHistory.set(prev => [...prev, ...newObjects]);
   }, [annHistory]);
 
-  const handleDeleteAnnotation = useCallback((id) => {
+  const handleDeleteObject = useCallback((id) => {
     annHistory.set(prev => prev.filter(a => a.id !== id));
   }, [annHistory]);
 
-  const handleUpdateAnnotation = useCallback((id, updates) => {
+  const handleUpdateObject = useCallback((id, updates) => {
     annHistory.set(prev =>
       prev.map(a => a.id === id ? { ...a, ...updates } : a)
     );
@@ -756,9 +759,9 @@ function App() {
           layers={layers}
           selectionIds={selectionIds}
           onSelectionChange={setSelectionIds}
-          onAddObject={handleAddAnnotation}
-          onDeleteObject={handleDeleteAnnotation}
-          onUpdateObject={handleUpdateAnnotation}
+          onAddObject={handleAddObject}
+          onDeleteObject={handleDeleteObject}
+          onUpdateObject={handleUpdateObject}
           onBatchUpdateObjects={handleBatchUpdateObjects}
           signatureDataUrl={signatureDataUrl}
           onRequestSignature={() => setShowSignaturePad(true)}
@@ -787,6 +790,13 @@ function App() {
           profile={profile}
           onSave={handleProfileSave}
           onClose={() => setShowProfileModal(false)}
+        />
+      )}
+
+      {activeWorkflow === 'evidence-builder' && (
+        <EvidenceBuilder
+          profile={profile}
+          onClose={() => setActiveWorkflow(null)}
         />
       )}
 

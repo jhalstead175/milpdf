@@ -10,6 +10,13 @@ import {
   distributeHorizontally, distributeVertically,
 } from '../editor/alignment';
 
+/**
+ * PDFViewer — MilPDF 2.0
+ *
+ * Rendering: PDF.js + <canvas>
+ * Objects:   EditorObjects (PDF-space coords) rendered as HTML overlays
+ * Events:    handled inline per active tool
+ */
 export default function PDFViewer({
   renderDoc, currentPage, zoom, activeTool,
   objects = [], layers = {},
@@ -20,8 +27,9 @@ export default function PDFViewer({
   onCropApply, onCropCancel,
   onDropFile, watermarkText,
 }) {
-  const canvasRef = useRef(null);
+  const canvasRef    = useRef(null);
   const containerRef = useRef(null);
+
   const textAreaRef = useRef(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const { getPage } = usePageCache(renderDoc, zoom);
@@ -106,6 +114,7 @@ export default function PDFViewer({
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
+
 
   const screenRectToPdf = useCallback((x, y, width, height) => {
     const pdfX = x / zoom;
@@ -489,23 +498,16 @@ export default function PDFViewer({
     }
   }, [cropRect, onCropApply, zoom]);
 
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
-
+  // ── Drag-and-drop file ─────────────────────────────────────────────────────
+  const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragOver(true); }, []);
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      onDropFile(file);
-    }
+    if (file && file.type === 'application/pdf') onDropFile(file);
   }, [onDropFile]);
+
   if (!renderDoc) {
     return (
       <div
@@ -522,6 +524,7 @@ export default function PDFViewer({
       </div>
     );
   }
+
 
   const selectionScreen = selectionBounds
     ? pdfRectToScreen(selectionBounds.pdfX, selectionBounds.pdfY, selectionBounds.width, selectionBounds.height)
@@ -547,6 +550,7 @@ export default function PDFViewer({
           onClick={handleCanvasClick}
           className={`pdf-canvas tool-${activeTool}`}
         />
+
 
         {nativeAnnotations.length > 0 && (
           <svg
@@ -598,6 +602,7 @@ export default function PDFViewer({
               </svg>
             );
           }
+
 
           if (obj.type === 'formField') {
             const inputStyle = {
@@ -675,6 +680,7 @@ export default function PDFViewer({
             <div
               key={obj.id}
               className={`annotation annotation-${obj.type} ${activeTool === 'select' ? 'draggable' : ''}`}
+
               style={style}
             >
               {obj.type === 'text' && (
@@ -713,6 +719,7 @@ export default function PDFViewer({
           );
         })}
 
+
         {activeTool === 'draw' && drawingPoints && drawingPoints.length > 1 && (
           <svg className="drawing-live" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
             <polyline
@@ -725,6 +732,7 @@ export default function PDFViewer({
             />
           </svg>
         )}
+
 
         {activeTool === 'text' && textBoxRect && (
           <div
@@ -800,6 +808,7 @@ export default function PDFViewer({
           </div>
         )}
 
+
         {textInput && (
           <div
             className="text-input-overlay"
@@ -821,6 +830,7 @@ export default function PDFViewer({
             />
           </div>
         )}
+
 
         {activeTool === 'crop' && cropRect && (
           <>
@@ -919,3 +929,4 @@ export default function PDFViewer({
     </div>
   );
 }
+
