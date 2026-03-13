@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const PROFILE_FILE = () => path.join(app.getPath('userData'), 'profile.json');
+
 // Keep a global reference so the window isn't garbage-collected
 let mainWindow = null;
 let fileToOpen = null;
@@ -176,4 +178,28 @@ ipcMain.handle('save-file-dialog', async (_event, { defaultName, data }) => {
   if (result.canceled) return false;
   fs.writeFileSync(result.filePath, Buffer.from(data, 'base64'));
   return true;
+});
+
+ipcMain.handle('load-profile', () => {
+  try {
+    const filePath = PROFILE_FILE();
+    if (!fs.existsSync(filePath)) return '';
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    console.error('Failed to load profile:', err);
+    return '';
+  }
+});
+
+ipcMain.handle('save-profile', (_event, data) => {
+  try {
+    const filePath = PROFILE_FILE();
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, data, 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to save profile:', err);
+    return false;
+  }
 });

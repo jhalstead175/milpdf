@@ -108,13 +108,13 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
             Every tool you need. Nothing you don't.
           </p>
           <div className="features-grid">
-            {features.map(({ Icon, title, desc }) => (
-              <div className="feature-card" key={title}>
+            {features.map((feature) => (
+              <div className="feature-card" key={feature.title}>
                 <div className="feature-icon-wrap">
-                  <Icon size={24} {...IC} />
+                  <feature.Icon size={24} {...IC} />
                 </div>
-                <h3>{title}</h3>
-                <p>{desc}</p>
+                <h3>{feature.title}</h3>
+                <p>{feature.desc}</p>
               </div>
             ))}
           </div>
@@ -131,11 +131,11 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
             Privacy is not a feature. It's the foundation.
           </p>
           <div className="pillars-grid">
-            {pillars.map(({ Icon, title, desc }) => (
-              <div className="pillar-card" key={title}>
-                <Icon size={32} {...IC} className="pillar-icon" />
-                <h3>{title}</h3>
-                <p>{desc}</p>
+            {pillars.map((pillar) => (
+              <div className="pillar-card" key={pillar.title}>
+                <pillar.Icon size={32} {...IC} className="pillar-icon" />
+                <h3>{pillar.title}</h3>
+                <p>{pillar.desc}</p>
               </div>
             ))}
           </div>

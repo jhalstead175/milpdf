@@ -1,17 +1,32 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
 import Toolbar from './components/Toolbar';
 import PageThumbnails from './components/PageThumbnails';
+import DocumentNavigator from './components/DocumentNavigator';
 import PDFViewer from './components/PDFViewer';
+import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
+import ProfileModal from './components/ProfileModal';
 import useHistory from './hooks/useHistory';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedAnnotations, cropPage,
+  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedEditorObjects, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
+import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
+import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
+import { scanForPii } from './veteran/autoRedact';
+import { parseDD214 } from './veteran/dd214Parser';
+import { loadProfile, saveProfile, normalizeProfile } from './veteran/profile';
+import { FORM_PROFILES, detectFormProfile, autofillScene } from './veteran/formProfiles';
+import {
+  alignLeft, alignRight, alignTop, alignBottom,
+  alignCenterH, alignCenterV,
+  distributeHorizontally, distributeVertically,
+} from './editor/alignment';
+import { bringForward, sendBackward, bringToFront, sendToBack } from './editor/zorder';
 import './App.css';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -44,8 +59,20 @@ function App() {
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
+  const [selectionIds, setSelectionIds] = useState([]);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [, setActiveWorkflow] = useState(null);
+  const [profile, setProfile] = useState(() => loadProfile());
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [formProfileKey, setFormProfileKey] = useState(null);
 
   const annHistory = useHistory([]);
+  const [layers] = useState({
+    base: { name: 'Base PDF', visible: true, locked: true },
+    annotations: { name: 'Annotations', visible: true, locked: false },
+    markup: { name: 'Markup', visible: true, locked: false },
+    forms: { name: 'Form Fields', visible: true, locked: false },
+  });
 
   const fileInputRef = useRef(null);
   const mergeInputRef = useRef(null);
@@ -68,7 +95,15 @@ function App() {
       updateFromResult(result);
       setFileName(name);
       setCurrentPage(1);
-      annHistory.clear([]);
+      const formFields = await Promise.all(
+        Array.from({ length: result.pdfDoc.getPageCount() }, (_, i) =>
+          detectFormFields(result.renderDoc, i + 1)
+        )
+      ).then(pages => pages.flat());
+      annHistory.clear(formFields);
+      setSelectionIds([]);
+      const fieldNames = formFields.map(f => f.fieldName).filter(Boolean);
+      setFormProfileKey(detectFormProfile(fieldNames));
       setActiveTool('select');
     } catch (err) {
       alert('Failed to load PDF: ' + err.message);
@@ -110,6 +145,8 @@ function App() {
         setCurrentPage(1);
         setFileName('images.pdf');
         annHistory.set([]);
+        setSelectionIds([]);
+        setFormProfileKey(null);
         setView('editor');
       } catch (err) {
         alert('Failed to convert images: ' + err.message);
@@ -141,7 +178,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (annHistory.state.length > 0) {
-        bytes = await embedAnnotations(bytes, annHistory.state);
+        bytes = await embedEditorObjects(bytes, annHistory.state, layers, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -159,7 +196,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, fileName, watermarkText]);
+  }, [pdfBytes, annHistory.state, fileName, watermarkText, layers]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -238,8 +275,8 @@ function App() {
       setCurrentPage(Math.min(currentPage, result.pdfDoc.getPageCount()));
       annHistory.set(prev =>
         prev
-          .filter(a => a.pageNum !== currentPage)
-          .map(a => a.pageNum > currentPage ? { ...a, pageNum: a.pageNum - 1 } : a)
+          .filter(a => a.page !== currentPage)
+          .map(a => a.page > currentPage ? { ...a, page: a.page - 1 } : a)
       );
     } catch (err) {
       alert('Failed to delete page: ' + err.message);
@@ -272,9 +309,9 @@ function App() {
       updateFromResult(result);
       setCurrentPage(toIndex + 1);
       annHistory.set(prev => prev.map(a => {
-        const oldPageIndex = a.pageNum - 1;
+        const oldPageIndex = a.page - 1;
         const newPos = order.indexOf(oldPageIndex);
-        return { ...a, pageNum: newPos + 1 };
+        return { ...a, page: newPos + 1 };
       }));
     } catch (err) {
       alert('Failed to reorder pages: ' + err.message);
@@ -323,7 +360,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (annHistory.state.length > 0) {
-        bytes = await embedAnnotations(bytes, annHistory.state);
+        bytes = await embedEditorObjects(bytes, annHistory.state, layers, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -332,7 +369,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, watermarkText]);
+  }, [pdfBytes, annHistory.state, watermarkText, layers]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -346,6 +383,67 @@ function App() {
       setLoading(false);
     }
   }, [renderDoc, fileName]);
+
+  const runDD214Analysis = useCallback(async () => {
+    if (!renderDoc) return;
+    setLoading(true);
+    try {
+      const result = await parseDD214(renderDoc, 1);
+      const fields = result.fields || {};
+      const summary = [
+        `Name: ${fields.fullName || 'N/A'}`,
+        `Branch: ${fields.branch || 'N/A'}`,
+        `Rank: ${fields.rank || 'N/A'}`,
+        `Entry: ${fields.entryDate || 'N/A'}`,
+        `Separation: ${fields.separationDate || 'N/A'}`,
+        `SSN: ${fields.ssn ? 'Detected' : 'N/A'}`,
+        `Confidence: ${(result.confidence * 100).toFixed(0)}%`,
+      ].join('\n');
+      if (confirm(`DD214 Analysis\n\n${summary}\n\nSave to profile?`)) {
+        const nextProfile = normalizeProfile({
+          ...profile,
+          member: {
+            ...profile.member,
+            fullName: fields.fullName || profile.member.fullName,
+            branch: fields.branch || profile.member.branch,
+            rank: fields.rank || profile.member.rank,
+            ssn: fields.ssn || profile.member.ssn,
+          },
+          service: {
+            ...profile.service,
+            entryDate: fields.entryDate || profile.service.entryDate,
+            separationDate: fields.separationDate || profile.service.separationDate,
+          },
+        });
+        handleProfileSave(nextProfile);
+      } else {
+        alert(`DD214 Analysis\n\n${summary}`);
+      }
+    } catch (err) {
+      alert('Failed to analyze DD214: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [renderDoc, profile, handleProfileSave]);
+
+  const runAutoRedact = useCallback(async () => {
+    if (!renderDoc) return;
+    setLoading(true);
+    try {
+      const findings = await scanForPii(renderDoc);
+      if (findings.length === 0) {
+        alert('No PII found.');
+        return;
+      }
+      if (confirm(`Found ${findings.length} possible PII items. Apply redactions?`)) {
+        handleAddObjects(findings);
+      }
+    } catch (err) {
+      alert('Failed to scan for PII: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [renderDoc, handleAddObjects]);
 
   // --- Images to PDF ---
   const handleImagesToPdf = useCallback(() => {
@@ -367,6 +465,8 @@ function App() {
       setCurrentPage(1);
       setFileName('images.pdf');
       annHistory.set([]);
+      setSelectionIds([]);
+      setFormProfileKey(null);
     } catch (err) {
       alert('Failed to convert images: ' + err.message);
     } finally {
@@ -380,6 +480,11 @@ function App() {
     annHistory.set(prev => [...prev, annotation]);
   }, [annHistory]);
 
+  const handleAddObjects = useCallback((newObjects) => {
+    if (!newObjects || newObjects.length === 0) return;
+    annHistory.set(prev => [...prev, ...newObjects]);
+  }, [annHistory]);
+
   const handleDeleteAnnotation = useCallback((id) => {
     annHistory.set(prev => prev.filter(a => a.id !== id));
   }, [annHistory]);
@@ -389,6 +494,112 @@ function App() {
       prev.map(a => a.id === id ? { ...a, ...updates } : a)
     );
   }, [annHistory]);
+
+  const handleBatchUpdateObjects = useCallback((patches) => {
+    if (!patches || patches.length === 0) return;
+    const patchMap = new Map(patches.map(p => [p.id, p]));
+    annHistory.set(prev =>
+      prev.map(obj => patchMap.has(obj.id) ? { ...obj, ...patchMap.get(obj.id) } : obj)
+    );
+  }, [annHistory]);
+
+  useEffect(() => {
+    setSelectionIds(prev => prev.filter(id => annHistory.state.some(o => o.id === id)));
+  }, [annHistory.state]);
+
+  const selectedSet = useMemo(() => new Set(selectionIds), [selectionIds]);
+  const selectedObjects = useMemo(
+    () => annHistory.state.filter(o => selectedSet.has(o.id)),
+    [annHistory.state, selectedSet]
+  );
+  const activeFormProfile = useMemo(
+    () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
+    [formProfileKey]
+  );
+
+  const handleCopy = useCallback(() => {
+    copyObjects(annHistory.state, selectedSet);
+  }, [annHistory.state, selectedSet]);
+
+  const handlePaste = useCallback(() => {
+    const pasted = pasteObjects(currentPage);
+    handleAddObjects(pasted);
+    setSelectionIds(pasted.map(o => o.id));
+  }, [currentPage, handleAddObjects]);
+
+  const handleDuplicate = useCallback(() => {
+    const duplicated = duplicateObjects(annHistory.state, selectedSet);
+    handleAddObjects(duplicated);
+    setSelectionIds(duplicated.map(o => o.id));
+  }, [annHistory.state, selectedSet, handleAddObjects]);
+
+  const handleProfileSave = useCallback((nextProfile) => {
+    const normalized = saveProfile(nextProfile);
+    setProfile(normalized);
+    setShowProfileModal(false);
+  }, []);
+
+  const handleAutoFill = useCallback(() => {
+    if (!activeFormProfile) return;
+    const filled = autofillScene(annHistory.state, profile, activeFormProfile);
+    annHistory.set(filled);
+  }, [activeFormProfile, annHistory, profile]);
+
+  const handleAlignment = useCallback((type) => {
+    if (selectedSet.size < 2) return;
+    let patches = [];
+    if (type === 'left') patches = alignLeft(annHistory.state, selectedSet);
+    else if (type === 'right') patches = alignRight(annHistory.state, selectedSet);
+    else if (type === 'top') patches = alignTop(annHistory.state, selectedSet);
+    else if (type === 'bottom') patches = alignBottom(annHistory.state, selectedSet);
+    else if (type === 'centerH') patches = alignCenterH(annHistory.state, selectedSet);
+    else if (type === 'centerV') patches = alignCenterV(annHistory.state, selectedSet);
+    else if (type === 'distributeH') patches = distributeHorizontally(annHistory.state, selectedSet);
+    else if (type === 'distributeV') patches = distributeVertically(annHistory.state, selectedSet);
+    handleBatchUpdateObjects(patches);
+  }, [annHistory.state, selectedSet, handleBatchUpdateObjects]);
+
+  const handleZOrder = useCallback((type) => {
+    if (selectionIds.length === 0) return;
+    const id = selectionIds[0];
+    let patches = [];
+    if (type === 'forward') patches = bringForward(annHistory.state, id);
+    else if (type === 'backward') patches = sendBackward(annHistory.state, id);
+    else if (type === 'front') patches = bringToFront(annHistory.state, id);
+    else if (type === 'back') patches = sendToBack(annHistory.state, id);
+    handleBatchUpdateObjects(patches);
+  }, [annHistory.state, selectionIds, handleBatchUpdateObjects]);
+
+  const commandContext = useMemo(() => ({
+    hasDoc: !!renderDoc,
+    setActiveTool,
+    handleOpen,
+    handleSave,
+    handleMerge,
+    handleSplit,
+    handleRotate,
+    handleAddBlank,
+    handleDeletePage,
+    handlePrint,
+    handleExportWord,
+    setShowSignaturePad,
+    signatureDataUrl,
+    setZoom,
+    fitZoom: () => setZoom(1.0),
+    setActiveWorkflow,
+    runDD214Analysis,
+    runAutoRedact,
+    applyAlignment: handleAlignment,
+    applyZOrder: handleZOrder,
+    handleCopy,
+    handlePaste,
+    handleDuplicate,
+    openProfile: () => setShowProfileModal(true),
+    autoFillProfile: handleAutoFill,
+  }), [renderDoc, setActiveTool, handleOpen, handleSave, handleMerge, handleSplit, handleRotate,
+    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, signatureDataUrl, setZoom,
+    setActiveWorkflow, runDD214Analysis, runAutoRedact, handleAlignment, handleZOrder,
+    handleCopy, handlePaste, handleDuplicate, handleAutoFill, setShowProfileModal]);
 
   // --- Signature ---
   const handleSignatureSave = useCallback((dataUrl) => {
@@ -424,20 +635,46 @@ function App() {
   useEffect(() => {
     const handler = (e) => {
       const isMod = e.ctrlKey || e.metaKey;
+      const inInput = !!e.target.closest('input,textarea,select');
+
       if (isMod && e.key === 'o') { e.preventDefault(); handleOpen(); }
       else if (isMod && e.key === 's') { e.preventDefault(); handleSave(); }
       else if (isMod && e.key === 'p') { e.preventDefault(); handlePrint(); }
+      else if (isMod && e.key === 'k') { e.preventDefault(); setShowCommandPalette(p => !p); }
+      else if (isMod && e.key === 'c' && !inInput) { e.preventDefault(); handleCopy(); }
+      else if (isMod && e.key === 'v' && !inInput) { e.preventDefault(); handlePaste(); }
+      else if (isMod && e.key === 'd' && !inInput) { e.preventDefault(); handleDuplicate(); }
       else if (isMod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); annHistory.undo(); }
       else if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); annHistory.redo(); }
-      else if (e.key === 'ArrowLeft' && !e.target.closest('input')) { setCurrentPage(p => Math.max(1, p - 1)); }
-      else if (e.key === 'ArrowRight' && !e.target.closest('input')) { setCurrentPage(p => Math.min(numPages, p + 1)); }
-      else if (e.key === 'Delete' && !e.target.closest('input') && renderDoc) { handleDeletePage(); }
+      else if (e.key === 'ArrowLeft' && !inInput && selectionIds.length === 0) {
+        setCurrentPage(p => Math.max(1, p - 1));
+      }
+      else if (e.key === 'ArrowRight' && !inInput && selectionIds.length === 0) {
+        setCurrentPage(p => Math.min(numPages, p + 1));
+      }
+      else if (e.key === 'Delete' && !inInput && renderDoc) { handleDeletePage(); }
       else if (e.key === '+' && isMod) { e.preventDefault(); setZoom(z => Math.min(3, z + 0.25)); }
       else if (e.key === '-' && isMod) { e.preventDefault(); setZoom(z => Math.max(0.25, z - 0.25)); }
+
+      if (!inInput && activeTool === 'select' && selectionIds.length > 0 &&
+          ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const nudge = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
+        const dy = e.key === 'ArrowUp' ? nudge : e.key === 'ArrowDown' ? -nudge : 0;
+        const patches = selectedObjects.map(obj => ({
+          id: obj.id,
+          pdfX: obj.pdfX + dx,
+          pdfY: obj.pdfY + dy,
+        }));
+        handleBatchUpdateObjects(patches);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleOpen, handleSave, handlePrint, handleDeletePage, annHistory, numPages, renderDoc]);
+  }, [handleOpen, handleSave, handlePrint, handleDeletePage, handleCopy, handlePaste,
+    handleDuplicate, annHistory, numPages, renderDoc, activeTool, selectionIds, selectedObjects,
+    handleBatchUpdateObjects]);
 
   return (
     <>
@@ -477,24 +714,52 @@ function App() {
         onImagesToPdf={handleImagesToPdf}
       />
 
+      {activeFormProfile && (
+        <div className="form-profile-banner">
+          <div>
+            Detected {activeFormProfile.name}. Auto-fill from saved profile?
+          </div>
+          <div className="form-profile-actions">
+            <button className="btn-secondary" onClick={() => setShowProfileModal(true)}>
+              Edit Profile
+            </button>
+            <button className="btn-primary" onClick={handleAutoFill}>
+              Auto-fill Fields
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="main-content">
-        <PageThumbnails
-          renderDoc={renderDoc}
-          numPages={numPages}
-          currentPage={currentPage}
-          onPageSelect={setCurrentPage}
-          onReorder={handleReorder}
-        />
+        <div className="sidebar">
+          <PageThumbnails
+            renderDoc={renderDoc}
+            numPages={numPages}
+            currentPage={currentPage}
+            onPageSelect={setCurrentPage}
+            onReorder={handleReorder}
+          />
+          <DocumentNavigator
+            renderDoc={renderDoc}
+            numPages={numPages}
+            currentPage={currentPage}
+            onPageSelect={setCurrentPage}
+          />
+        </div>
 
         <PDFViewer
           renderDoc={renderDoc}
           currentPage={currentPage}
           zoom={zoom}
           activeTool={activeTool}
-          annotations={annHistory.state}
-          onAddAnnotation={handleAddAnnotation}
-          onDeleteAnnotation={handleDeleteAnnotation}
-          onUpdateAnnotation={handleUpdateAnnotation}
+          objects={annHistory.state}
+          layers={layers}
+          selectionIds={selectionIds}
+          onSelectionChange={setSelectionIds}
+          onAddObject={handleAddAnnotation}
+          onDeleteObject={handleDeleteAnnotation}
+          onUpdateObject={handleUpdateAnnotation}
+          onBatchUpdateObjects={handleBatchUpdateObjects}
           signatureDataUrl={signatureDataUrl}
           onRequestSignature={() => setShowSignaturePad(true)}
           onCropApply={handleCropApply}
@@ -508,6 +773,20 @@ function App() {
         <SignaturePad
           onSave={handleSignatureSave}
           onClose={() => setShowSignaturePad(false)}
+        />
+      )}
+
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        context={commandContext}
+      />
+
+      {showProfileModal && (
+        <ProfileModal
+          profile={profile}
+          onSave={handleProfileSave}
+          onClose={() => setShowProfileModal(false)}
         />
       )}
 

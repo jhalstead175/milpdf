@@ -115,7 +115,9 @@ export default function Toolbar({
   );
 }
 
-function ToolBtn({ name, Icon, label, activeTool, onToolChange, hasDoc }) {
+function ToolBtn(props) {
+  const { name, label, activeTool, onToolChange, hasDoc } = props;
+  const IconComp = props.Icon;
   return (
     <button
       className={activeTool === name ? 'active' : ''}
@@ -123,7 +125,7 @@ function ToolBtn({ name, Icon, label, activeTool, onToolChange, hasDoc }) {
       disabled={!hasDoc}
       title={label}
     >
-      <Icon {...IC} /> {label}
+      <IconComp {...IC} /> {label}
     </button>
   );
 }

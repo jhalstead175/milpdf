@@ -124,14 +124,22 @@ html.editor-active #root {
   overflow: hidden;
 }
 
-/* ===== Thumbnails Sidebar ===== */
-.page-thumbnails {
-  width: 160px;
-  background: #181825;
-  border-right: 1px solid #313244;
+.sidebar {
+  width: 280px;
   display: flex;
   flex-direction: column;
+  border-right: 1px solid #313244;
+  background: #181825;
   flex-shrink: 0;
+}
+
+/* ===== Thumbnails Sidebar ===== */
+.page-thumbnails {
+  width: 100%;
+  background: #181825;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 260px;
 }
 
 .page-thumbnails h3 {
@@ -284,11 +292,12 @@ html.editor-active #root {
   opacity: 1;
 }
 
-.annotation-text span {
+.annotation-text div {
   color: #000;
   font-family: Helvetica, Arial, sans-serif;
   pointer-events: none;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .annotation-signature {
@@ -355,12 +364,32 @@ html.editor-active #root {
   padding: 0;
 }
 
+.native-annotation-layer {
+  pointer-events: none;
+}
+
+.form-sig-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #0f172a;
+  text-align: center;
+}
+
+.form-sig-block img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* ===== Text Input Overlay ===== */
 .text-input-overlay {
   position: absolute;
 }
 
-.text-input-overlay input {
+.text-input-overlay input,
+.text-input-overlay textarea {
   border: 2px solid #89b4fa;
   border-radius: 4px;
   padding: 4px 8px;
@@ -369,7 +398,11 @@ html.editor-active #root {
   background: rgba(255, 255, 255, 0.95);
   color: #000;
   outline: none;
-  min-width: 150px;
+  box-sizing: border-box;
+}
+
+.text-input-overlay textarea {
+  resize: both;
 }
 
 /* ===== Crop Overlay ===== */
@@ -606,6 +639,59 @@ html.editor-active #root {
   pointer-events: none;
 }
 
+/* ===== Text Box Overlay ===== */
+.text-box-overlay {
+  position: absolute;
+  border: 2px dashed #89b4fa;
+  background: rgba(137, 180, 250, 0.1);
+  pointer-events: none;
+}
+
+/* ===== Lasso Overlay ===== */
+.lasso-overlay {
+  position: absolute;
+  border: 1px dashed #f9e2af;
+  background: rgba(249, 226, 175, 0.12);
+  pointer-events: none;
+}
+
+/* ===== Selection Box ===== */
+.selection-box {
+  position: absolute;
+  border: 1px solid #89b4fa;
+  box-shadow: 0 0 0 1px rgba(137, 180, 250, 0.25);
+  pointer-events: none;
+}
+
+.rotation-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #89b4fa;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+/* ===== Snap Guides ===== */
+.snap-guide {
+  position: absolute;
+  background: rgba(137, 180, 250, 0.6);
+  pointer-events: none;
+}
+
+.snap-guide-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.snap-guide-y {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
 /* ===== Edit Input Overlay ===== */
 .edit-input-overlay {
   position: absolute;
@@ -669,4 +755,265 @@ html.editor-active #root {
 
 .insert-options .btn-primary {
   flex: 1;
+}
+
+/* ===== Document Navigator ===== */
+.doc-navigator {
+  flex: 1;
+  overflow-y: auto;
+  background: #181825;
+  border-top: 1px solid #313244;
+}
+
+.navigator-header {
+  padding: 10px 12px;
+  color: #a6adc8;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #313244;
+}
+
+.navigator-header progress {
+  width: 80px;
+  height: 6px;
+}
+
+.nav-section {
+  border-left: 3px solid transparent;
+  padding: 6px 8px 6px 10px;
+}
+
+.nav-section.active {
+  background: rgba(137, 180, 250, 0.08);
+}
+
+.nav-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.nav-icon {
+  font-size: 11px;
+  color: #a6adc8;
+}
+
+.nav-label {
+  flex: 1;
+  font-size: 12px;
+  color: #cdd6f4;
+}
+
+.nav-pages {
+  font-size: 11px;
+  color: #6c7086;
+}
+
+.nav-subsection {
+  margin-left: 16px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #a6adc8;
+  cursor: pointer;
+}
+
+.nav-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: #6c7086;
+}
+
+/* ===== Alignment Toolbar ===== */
+.align-toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 6px;
+  z-index: 5;
+}
+
+.align-toolbar button {
+  background: transparent;
+  border: 1px solid #45475a;
+  color: #cdd6f4;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.align-toolbar button:hover {
+  border-color: #89b4fa;
+  color: #89b4fa;
+}
+
+.align-divider {
+  width: 1px;
+  height: 18px;
+  background: #45475a;
+}
+
+/* ===== Command Palette ===== */
+.cmd-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  z-index: 3000;
+}
+
+.cmd-palette {
+  width: 540px;
+  max-width: 92vw;
+  background: #1e1e2e;
+  border: 1px solid #313244;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.cmd-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #313244;
+}
+
+.cmd-search-icon {
+  color: #89b4fa;
+  font-size: 14px;
+}
+
+.cmd-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #cdd6f4;
+  outline: none;
+  font-size: 14px;
+}
+
+.cmd-esc-hint {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  color: #a6adc8;
+}
+
+.cmd-results {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.cmd-group {
+  padding: 8px 0;
+}
+
+.cmd-group-label {
+  padding: 0 12px 6px;
+  font-size: 11px;
+  color: #6c7086;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.cmd-item.highlighted {
+  background: #313244;
+}
+
+.cmd-item.destructive {
+  color: #f38ba8;
+}
+
+.cmd-icon {
+  color: #89b4fa;
+}
+
+.cmd-label {
+  flex: 1;
+  font-size: 13px;
+}
+
+.cmd-shortcut {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  color: #a6adc8;
+}
+
+.cmd-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #6c7086;
+}
+
+/* ===== Profile Modal ===== */
+.profile-modal {
+  width: 720px;
+  max-width: 92vw;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.profile-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #a6adc8;
+  gap: 4px;
+}
+
+.profile-grid input {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #45475a;
+  background: #11111b;
+  color: #cdd6f4;
+  font-size: 13px;
+}
+
+/* ===== Form Profile Banner ===== */
+.form-profile-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(137, 180, 250, 0.12);
+  border-bottom: 1px solid #313244;
+  color: #cdd6f4;
+  font-size: 13px;
+}
+
+.form-profile-actions {
+  display: flex;
+  gap: 8px;
 }

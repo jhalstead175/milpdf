@@ -43,12 +43,24 @@ function ThumbnailItem({
   onDragStart, onDragOver, onDrop, onDragEnd, isDragOver,
 }) {
   const canvasRef = useRef(null);
+  const observerRef = useRef(null);
+  const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
-    if (canvasRef.current && renderDoc) {
-      renderPageToCanvas(renderDoc, index + 1, canvasRef.current, 0.2).catch(() => {});
-    }
-  }, [renderDoc, index]);
+    if (!canvasRef.current || !renderDoc) return;
+    if (rendered) return;
+
+    observerRef.current = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !rendered) {
+        renderPageToCanvas(renderDoc, index + 1, canvasRef.current, 0.2).catch(() => {});
+        setRendered(true);
+        observerRef.current?.disconnect();
+      }
+    }, { rootMargin: '200px' });
+
+    observerRef.current.observe(canvasRef.current);
+    return () => observerRef.current?.disconnect();
+  }, [renderDoc, index, rendered]);
 
   return (
     <div

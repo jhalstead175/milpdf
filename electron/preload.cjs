@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Request a native save-file dialog
   saveFileDialog: (defaultName, base64Data) =>
     ipcRenderer.invoke('save-file-dialog', { defaultName, data: base64Data }),
+  // Load/save profile data
+  loadProfile: () => ipcRenderer.invoke('load-profile'),
+  saveProfile: (data) => ipcRenderer.invoke('save-profile', data),
   // Check if running in Electron
   isElectron: true,
 });

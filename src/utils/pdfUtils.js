@@ -1,5 +1,7 @@
 import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions, version } from 'pdfjs-dist';
+import { drawTextBox } from './textLayout';
+import { transformToPdfLib } from '../editor/Transform';
 
 // Set up PDF.js worker from CDN
 GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
@@ -25,6 +27,17 @@ async function refreshRender(pdfDoc) {
   const renderDoc = await getRenderDoc(bytes);
   return { pdfDoc, bytes: new Uint8Array(bytes), renderDoc };
 }
+
+// Structural mutations are the only callers of refreshRender.
+export const structuralOps = {
+  deletePage,
+  rotatePage,
+  addBlankPage,
+  mergePdf,
+  insertPdf,
+  reorderPages,
+  cropPage,
+};
 
 export async function renderPageToCanvas(renderDoc, pageNum, canvas, scale = 1.0) {
   const page = await renderDoc.getPage(pageNum);
@@ -135,98 +148,154 @@ export async function insertPdf(pdfDoc, otherArrayBuffer, atIndex) {
   return refreshRender(pdfDoc);
 }
 
-export async function embedAnnotations(currentBytes, annotations) {
-  const pdfDoc = await PDFDocument.load(currentBytes);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
+function hexToRgbColor(hex, fallback = rgb(0, 0, 0)) {
+  if (!hex || typeof hex !== 'string') return fallback;
+  const raw = hex.replace('#', '').trim();
+  if (raw.length !== 6) return fallback;
+  const r = parseInt(raw.slice(0, 2), 16) / 255;
+  const g = parseInt(raw.slice(2, 4), 16) / 255;
+  const b = parseInt(raw.slice(4, 6), 16) / 255;
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return fallback;
+  return rgb(r, g, b);
+}
 
-  for (const ann of annotations) {
-    const pageIndex = ann.pageNum - 1;
+function resolveFontKey(obj) {
+  const family = obj.fontFamily || 'Helvetica';
+  const weight = obj.fontWeight || 'normal';
+  const style = obj.fontStyle || 'normal';
+
+  if (family === 'Times-Roman') {
+    if (weight === 'bold' && style === 'italic') return StandardFonts.TimesBoldItalic;
+    if (weight === 'bold') return StandardFonts.TimesBold;
+    if (style === 'italic') return StandardFonts.TimesItalic;
+    return StandardFonts.TimesRoman;
+  }
+
+  if (family === 'Courier') {
+    if (weight === 'bold' && style === 'italic') return StandardFonts.CourierBoldOblique;
+    if (weight === 'bold') return StandardFonts.CourierBold;
+    if (style === 'italic') return StandardFonts.CourierOblique;
+    return StandardFonts.Courier;
+  }
+
+  if (weight === 'bold' && style === 'italic') return StandardFonts.HelveticaBoldOblique;
+  if (weight === 'bold') return StandardFonts.HelveticaBold;
+  if (style === 'italic') return StandardFonts.HelveticaOblique;
+  return StandardFonts.Helvetica;
+}
+
+// ARCHITECTURE INVARIANT:
+// embedEditorObjects is called only during explicit save/print operations.
+export async function embedEditorObjects(currentBytes, objects, layers = null, options = {}) {
+  const pdfDoc = await PDFDocument.load(currentBytes);
+  const pages = pdfDoc.getPages();
+  const fontCache = new Map();
+
+  const getFont = async (obj) => {
+    const key = resolveFontKey(obj);
+    if (!fontCache.has(key)) {
+      fontCache.set(key, await pdfDoc.embedFont(key));
+    }
+    return fontCache.get(key);
+  };
+
+  for (const obj of objects) {
+    if (obj.visible === false) continue;
+    if (layers && layers[obj.layerId]?.visible === false) continue;
+    if (obj.type === 'group') continue;
+
+    const pageIndex = obj.page - 1;
     if (pageIndex < 0 || pageIndex >= pages.length) continue;
     const page = pages[pageIndex];
-    const pageHeight = page.getHeight();
-    const scale = ann.scale || 1;
 
-    if (ann.type === 'text') {
-      const pdfX = ann.x / scale;
-      const pdfY = pageHeight - (ann.y / scale) - (ann.fontSize || 16);
-      page.drawText(ann.text, {
-        x: pdfX,
-        y: pdfY,
-        size: ann.fontSize || 16,
-        font,
-        color: rgb(0, 0, 0),
+    if (obj.type === 'text') {
+      const font = await getFont(obj);
+      const color = hexToRgbColor(obj.color, rgb(0, 0, 0));
+      const { rotate } = transformToPdfLib(obj.transform);
+      drawTextBox(page, obj, font, { color, rotate });
+    } else if (obj.type === 'signature') {
+      const isJpg = String(obj.dataUrl || '').startsWith('data:image/jpeg');
+      const imgBytes = await fetch(obj.dataUrl).then(r => r.arrayBuffer());
+      const image = isJpg ? await pdfDoc.embedJpg(imgBytes) : await pdfDoc.embedPng(imgBytes);
+      const { rotate } = transformToPdfLib(obj.transform);
+      page.drawImage(image, {
+        x: obj.pdfX,
+        y: obj.pdfY,
+        width: obj.width,
+        height: obj.height,
+        rotate,
       });
-    } else if (ann.type === 'signature') {
-      const pngBytes = await fetch(ann.dataUrl).then(r => r.arrayBuffer());
-      const image = await pdfDoc.embedPng(pngBytes);
-      const w = ann.width / scale;
-      const h = ann.height / scale;
-      const pdfX = ann.x / scale;
-      const pdfY = pageHeight - (ann.y / scale) - h;
-      page.drawImage(image, { x: pdfX, y: pdfY, width: w, height: h });
-    } else if (ann.type === 'highlight') {
-      const pdfX = ann.x / scale;
-      const pdfW = ann.width / scale;
-      const pdfH = ann.height / scale;
-      const pdfY = pageHeight - (ann.y / scale) - pdfH;
+    } else if (obj.type === 'highlight') {
       page.drawRectangle({
-        x: pdfX,
-        y: pdfY,
-        width: pdfW,
-        height: pdfH,
+        x: obj.pdfX,
+        y: obj.pdfY,
+        width: obj.width,
+        height: obj.height,
         color: rgb(1, 0.92, 0.23),
         opacity: 0.35,
       });
-    } else if (ann.type === 'redact') {
-      const pdfX = ann.x / scale;
-      const pdfW = ann.width / scale;
-      const pdfH = ann.height / scale;
-      const pdfY = pageHeight - (ann.y / scale) - pdfH;
+    } else if (obj.type === 'redact') {
       page.drawRectangle({
-        x: pdfX,
-        y: pdfY,
-        width: pdfW,
-        height: pdfH,
+        x: obj.pdfX,
+        y: obj.pdfY,
+        width: obj.width,
+        height: obj.height,
         color: rgb(0, 0, 0),
         opacity: 1,
       });
-    } else if (ann.type === 'whiteout') {
-      const pdfX = ann.x / scale;
-      const pdfW = ann.width / scale;
-      const pdfH = ann.height / scale;
-      const pdfY = pageHeight - (ann.y / scale) - pdfH;
+    } else if (obj.type === 'whiteout') {
       page.drawRectangle({
-        x: pdfX,
-        y: pdfY,
-        width: pdfW,
-        height: pdfH,
+        x: obj.pdfX,
+        y: obj.pdfY,
+        width: obj.width,
+        height: obj.height,
         color: rgb(1, 1, 1),
         opacity: 1,
       });
-    } else if (ann.type === 'drawing') {
-      // Freehand drawings: draw as a series of tiny lines
-      const points = ann.points || [];
+    } else if (obj.type === 'drawing') {
+      const points = obj.pdfPoints || obj.points || [];
       for (let i = 1; i < points.length; i++) {
-        const x1 = points[i - 1].x / scale;
-        const y1 = pageHeight - (points[i - 1].y / scale);
-        const x2 = points[i].x / scale;
-        const y2 = pageHeight - (points[i].y / scale);
+        const x1 = points[i - 1].x;
+        const y1 = points[i - 1].y;
+        const x2 = points[i].x;
+        const y2 = points[i].y;
         page.drawLine({
           start: { x: x1, y: y1 },
           end: { x: x2, y: y2 },
-          thickness: ann.lineWidth || 2,
-          color: rgb(
-            ...(ann.color === '#f38ba8' ? [0.95, 0.55, 0.66] :
-                ann.color === '#89b4fa' ? [0.54, 0.71, 0.98] :
-                [0, 0, 0])
-          ),
+          thickness: obj.lineWidth || 2,
+          color: hexToRgbColor(obj.color, rgb(0, 0, 0)),
         });
+      }
+    } else if (obj.type === 'formField') {
+      try {
+        const form = pdfDoc.getForm();
+        const field = form.getField(obj.fieldName);
+        if (field.constructor.name === 'PDFTextField') {
+          field.setText(obj.fieldValue ?? '');
+        } else if (field.constructor.name === 'PDFCheckBox') {
+          obj.fieldValue === 'On' || obj.fieldValue === true ? field.check() : field.uncheck();
+        } else if (field.constructor.name === 'PDFDropdown') {
+          field.select(obj.fieldValue ?? '');
+        }
+      } catch (err) {
+        console.warn(`Could not fill field ${obj.fieldName}:`, err);
       }
     }
   }
 
+  if (options.flattenForm) {
+    try {
+      pdfDoc.getForm().flatten();
+    } catch (err) {
+      console.warn('Failed to flatten form:', err);
+    }
+  }
+
   return pdfDoc.save();
+}
+
+export async function embedAnnotations(currentBytes, annotations) {
+  return embedEditorObjects(currentBytes, annotations);
 }
 
 export async function cropPage(pdfDoc, pageIndex, cropBox) {
@@ -318,7 +387,7 @@ export function printPdf(bytes) {
   const w = window.open(url, '_blank');
   if (w) {
     setTimeout(() => {
-      try { w.print(); } catch (_) { /* user can print from PDF viewer */ }
+      try { w.print(); } catch { /* user can print from PDF viewer */ }
     }, 1000);
   } else {
     alert('Please allow popups to print.');
