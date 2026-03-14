@@ -18,6 +18,15 @@ export function buildCommandRegistry(ctx) {
       execute: () => ctx.handleSave(),
     },
     {
+      id: 'file.saveAs',
+      label: 'Save As',
+      shortcut: 'Ctrl+Shift+S',
+      keywords: ['save as', 'export as'],
+      category: 'File',
+      requiresDoc: true,
+      execute: () => ctx.handleSaveAs?.(),
+    },
+    {
       id: 'file.print',
       label: 'Print PDF',
       shortcut: 'Ctrl+P',

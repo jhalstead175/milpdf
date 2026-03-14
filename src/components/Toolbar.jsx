@@ -37,6 +37,7 @@ export default function Toolbar({
         { groupLabel: 'Document' },
         { id: 'file.open', label: 'Open PDF', subLabel: 'Load a document', icon: FolderOpen, disabled: false },
         { id: 'file.save', label: 'Save PDF', subLabel: 'Export annotations', icon: Save, disabled: !hasDoc },
+        { id: 'file.saveAs', label: 'Save As', subLabel: 'Choose a filename', icon: Save, disabled: !hasDoc },
         { id: 'file.print', label: 'Print', subLabel: 'Send to printer', icon: Printer, disabled: !hasDoc },
         { groupLabel: 'Assets' },
         { id: 'file.importImages', label: 'Import Images', subLabel: 'Place on page', icon: ImagePlus, disabled: !hasDoc },

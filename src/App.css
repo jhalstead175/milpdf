@@ -20,6 +20,8 @@ html.editor-active #root {
 
 /* ===== Toolbar ===== */
 .toolbar {
+  position: relative;
+  z-index: 2000;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -27,7 +29,7 @@ html.editor-active #root {
   background: #1e1e2e;
   border-bottom: 1px solid #313244;
   flex-shrink: 0;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .toolbar-brand {
@@ -118,7 +120,7 @@ html.editor-active #root {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  z-index: 50;
+  z-index: 4000;
 }
 
 .toolbar-menu-card--grid {
@@ -859,6 +861,7 @@ html.editor-active #root {
   background: #11111b;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding: 24px;
 }
 
@@ -895,6 +898,8 @@ html.editor-active #root {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   line-height: 0;
   align-self: flex-start;
+  margin: 0 auto;
+  width: fit-content;
 }
 
 .pdf-layer,

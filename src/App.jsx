@@ -273,6 +273,32 @@ function App() {
     }
   }, [pdfBytes, objects, fileName, watermarkText, layers]);
 
+  const handleSaveAs = useCallback(async () => {
+    if (!pdfBytes) return;
+    setLoading(true);
+    try {
+      let bytes = pdfBytes;
+      if (objects.length > 0) {
+        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
+      }
+      if (watermarkText) {
+        bytes = await addWatermark(bytes, watermarkText);
+      }
+      if (isElectron) {
+        const base64 = btoa(
+          new Uint8Array(bytes).reduce((s, b) => s + String.fromCharCode(b), '')
+        );
+        await window.electronAPI.saveFileDialog(fileName, base64);
+      } else {
+        await saveWithDialog(bytes, fileName);
+      }
+    } catch (err) {
+      alert('Failed to save PDF: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, objects, fileName, watermarkText, layers]);
+
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
   }, []);
@@ -815,13 +841,14 @@ const runDD214Analysis = useCallback(async () => {
     setActiveTool(tool);
   }, [signatureDataUrl, setActiveTool]);
 
-  const commandContext = useMemo(() => ({
-    hasDoc: !!renderDoc,
-    setActiveTool,
-    handleToolChange,
-    handleOpen,
-    handleSave,
-    handleMerge,
+    const commandContext = useMemo(() => ({
+      hasDoc: !!renderDoc,
+      setActiveTool,
+      handleToolChange,
+      handleOpen,
+      handleSave,
+      handleSaveAs,
+      handleMerge,
     handleSplit,
     handleRotate,
     handleAddBlank,
@@ -849,11 +876,11 @@ const runDD214Analysis = useCallback(async () => {
     openProfile: () => setShowProfileModal(true),
     autoFillProfile: handleAutoFill,
     runKernelHealthCheck: handleKernelHealthCheck,
-  }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleMerge, handleSplit, handleRotate,
-    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
-    signatureDataUrl, setZoom, setCurrentPage, numPages, setActiveWorkflow, runDD214Analysis,
-    runAutoRedact, handleAlignment, handleZOrder, handleCopy, handlePaste, handleDuplicate,
-    undo, redo, handleAutoFill, setShowProfileModal, handleKernelHealthCheck]);
+    }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleSaveAs, handleMerge, handleSplit, handleRotate,
+      handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
+      signatureDataUrl, setZoom, setCurrentPage, numPages, setActiveWorkflow, runDD214Analysis,
+      runAutoRedact, handleAlignment, handleZOrder, handleCopy, handlePaste, handleDuplicate,
+      undo, redo, handleAutoFill, setShowProfileModal, handleKernelHealthCheck]);
 
   const commands = useMemo(() => buildCommandRegistry(commandContext), [commandContext]);
 
