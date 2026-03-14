@@ -1,4 +1,15 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import {
+  PanelLeftOpen,
+  PanelLeftClose,
+  PanelRightOpen,
+  PanelRightClose,
+  Layers as LayersIcon,
+  SlidersHorizontal,
+  Shield,
+  Network,
+  MessageSquare,
+} from 'lucide-react';
 import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
 import V3AppShell from './app/AppShell';
@@ -18,7 +29,7 @@ import ToastStack from './components/ToastStack';
 import { useEditorStore } from './core/sceneGraph/store';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, imagesToPdf, cropPage,
+  addBlankPage, mergePdf, insertPdf, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { embedEditorObjects } from './core/export';
@@ -158,6 +169,13 @@ function App() {
   const insertFileRef = useRef(null);
   const imageInputRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
+  const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
+  const [imagePlacement, setImagePlacement] = useState(null);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState('layers');
 
   const buildPageMeta = useCallback((doc) => (
     doc.getPages().map((page, index) => ({
@@ -210,42 +228,6 @@ function App() {
     const buffer = await file.arrayBuffer();
     await loadFromBuffer(buffer, file.name);
   }, [loadFromBuffer]);
-
-  // --- Listen for files opened via OS file association (Electron) ---
-  useEffect(() => {
-    if (!isElectron) return;
-    window.electronAPI.onOpenFile(async (fileInfo) => {
-      const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
-      await loadFromBuffer(bytes.buffer, fileInfo.name);
-    });
-    window.electronAPI.onOpenImages(async (images) => {
-      // Convert base64 images to File objects and run imagesToPdf
-      const files = images.map(img => {
-        const binary = atob(img.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const ext = img.name.split('.').pop().toLowerCase();
-        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tiff: 'image/tiff', tif: 'image/tiff' };
-        return new File([bytes], img.name, { type: mimeMap[ext] || 'image/png' });
-      });
-      files.sort((a, b) => a.name.localeCompare(b.name));
-      try {
-        const result = await imagesToPdf(files);
-        setPdfDoc(result.pdfDoc);
-        setPdfBytes(result.bytes);
-        setRenderDoc(result.renderDoc);
-        setNumPages(result.pdfDoc.getPageCount());
-        setCurrentPage(1);
-        setFileName('images.pdf');
-        resetObjects([]);
-        setSelection([]);
-        setFormProfileKey(null);
-        setView('editor');
-      } catch (err) {
-        alert('Failed to convert images: ' + err.message);
-      }
-    });
-  }, [loadFromBuffer, resetObjects, setSelection]);
 
   // --- File operations ---
   const handleOpen = useCallback(async () => {
@@ -566,35 +548,108 @@ const runDD214Analysis = useCallback(async () => {
     }
   }, [renderDoc, handleAddObjects]);
 
-  // --- Images to PDF ---
-  const handleImagesToPdf = useCallback(() => {
+  // --- Image placement ---
+  const handleImportImages = useCallback(() => {
     imageInputRef.current?.click();
   }, []);
 
+  const readImageFile = useCallback(async (file) => {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const bitmap = await createImageBitmap(file);
+    const placement = {
+      name: file.name,
+      dataUrl,
+      width: bitmap.width,
+      height: bitmap.height,
+    };
+    bitmap.close?.();
+    return placement;
+  }, []);
+
+  const queueImagePlacements = useCallback(async (files) => {
+    if (files.length === 0) return;
+    const placements = [];
+    for (const file of files) {
+      try {
+        placements.push(await readImageFile(file));
+      } catch (err) {
+        console.warn('Failed to load image:', file.name, err);
+      }
+    }
+    if (placements.length === 0) return;
+    setImagePlacementQueue(placements);
+    setActiveTool('image');
+  }, [readImageFile, setActiveTool]);
+
   const handleImageFiles = useCallback(async (e) => {
     const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setLoading(true);
-    try {
-      // Sort files by name for predictable page order
+    await queueImagePlacements(files);
+    if (e.target) e.target.value = '';
+  }, [queueImagePlacements]);
+
+  // --- Listen for files opened via OS file association (Electron) ---
+  useEffect(() => {
+    if (!isElectron) return;
+    window.electronAPI.onOpenFile(async (fileInfo) => {
+      const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
+      await loadFromBuffer(bytes.buffer, fileInfo.name);
+    });
+    window.electronAPI.onOpenImages(async (images) => {
+      const files = images.map(img => {
+        const binary = atob(img.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const ext = img.name.split('.').pop().toLowerCase();
+        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tiff: 'image/tiff', tif: 'image/tiff' };
+        return new File([bytes], img.name, { type: mimeMap[ext] || 'image/png' });
+      });
       files.sort((a, b) => a.name.localeCompare(b.name));
-      const result = await imagesToPdf(files);
-      setPdfDoc(result.pdfDoc);
-      setPdfBytes(result.bytes);
-      setRenderDoc(result.renderDoc);
-      setNumPages(result.pdfDoc.getPageCount());
-      setCurrentPage(1);
-      setFileName('images.pdf');
-      resetObjects([]);
-      setSelection([]);
-      setFormProfileKey(null);
-    } catch (err) {
-      alert('Failed to convert images: ' + err.message);
-    } finally {
-      setLoading(false);
-      e.target.value = '';
+      await queueImagePlacements(files);
+      setView('editor');
+    });
+  }, [loadFromBuffer, queueImagePlacements, setView]);
+
+  useEffect(() => {
+    setImagePlacement(imagePlacementQueue[0] || null);
+    if (imagePlacementQueue.length === 0 && activeTool === 'image') {
+      setActiveTool('select');
     }
-  }, [resetObjects, setSelection]);
+  }, [imagePlacementQueue, activeTool, setActiveTool]);
+
+  const handleImagePlaced = useCallback(() => {
+    setImagePlacementQueue(prev => prev.slice(1));
+  }, []);
+
+  const handleImagePlacementCancel = useCallback(() => {
+    setImagePlacementQueue([]);
+  }, []);
+
+  const startSidebarResize = useCallback((side, e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth;
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      if (side === 'left') {
+        const next = Math.min(420, Math.max(200, startWidth + dx));
+        setLeftSidebarWidth(next);
+      } else {
+        const next = Math.min(420, Math.max(240, startWidth - dx));
+        setRightSidebarWidth(next);
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [leftSidebarWidth, rightSidebarWidth]);
 
   const handleDeleteObject = useCallback((id) => {
     const obj = objects.find(item => item.id === id);
@@ -774,7 +829,7 @@ const runDD214Analysis = useCallback(async () => {
     handlePrint,
     handleExportWord,
     handleWatermark,
-    handleImagesToPdf,
+    handleImportImages,
     setShowSignaturePad,
     signatureDataUrl,
     setZoom,
@@ -795,7 +850,7 @@ const runDD214Analysis = useCallback(async () => {
     autoFillProfile: handleAutoFill,
     runKernelHealthCheck: handleKernelHealthCheck,
   }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleMerge, handleSplit, handleRotate,
-    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImagesToPdf,
+    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
     signatureDataUrl, setZoom, setCurrentPage, numPages, setActiveWorkflow, runDD214Analysis,
     runAutoRedact, handleAlignment, handleZOrder, handleCopy, handlePaste, handleDuplicate,
     undo, redo, handleAutoFill, setShowProfileModal, handleKernelHealthCheck]);
@@ -926,73 +981,180 @@ const runDD214Analysis = useCallback(async () => {
         {showV3 ? (
           <V3AppShell />
         ) : (
-        <>
-          <div className="sidebar">
-            <PageThumbnails
-              renderDoc={renderDoc}
-              numPages={numPages}
-              currentPage={currentPage}
-              onPageSelect={setCurrentPage}
-              onReorder={handleReorder}
-            />
-            <DocumentNavigator
-              renderDoc={renderDoc}
-              numPages={numPages}
-              currentPage={currentPage}
-              onPageSelect={setCurrentPage}
-            />
-          </div>
+          <>
+            {leftCollapsed ? (
+              <div className="sidebar-collapsed">
+                <button onClick={() => setLeftCollapsed(false)} title="Show Pages">
+                  <PanelLeftOpen size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="sidebar" style={{ width: leftSidebarWidth }}>
+                <div className="sidebar-header">
+                  Pages
+                  <button onClick={() => setLeftCollapsed(true)} title="Collapse sidebar">
+                    <PanelLeftClose size={16} />
+                  </button>
+                </div>
+                <PageThumbnails
+                  renderDoc={renderDoc}
+                  numPages={numPages}
+                  currentPage={currentPage}
+                  onPageSelect={setCurrentPage}
+                  onReorder={handleReorder}
+                />
+                <DocumentNavigator
+                  renderDoc={renderDoc}
+                  numPages={numPages}
+                  currentPage={currentPage}
+                  onPageSelect={setCurrentPage}
+                />
+              </div>
+            )}
 
-          <PDFViewer
-            renderDoc={renderDoc}
-            currentPage={currentPage}
-            zoom={zoom}
-            activeTool={activeTool}
-            objects={objects}
-            pageObjects={currentPageObjects}
-            layers={layers}
-            selectionIds={selectionIds}
-            onSelectionChange={setSelection}
-            interactionState={interactionState}
-            setInteractionState={setInteractionState}
-            onAddObject={handleAddObject}
-            onDeleteObject={handleDeleteObject}
-            onUpdateObject={handleUpdateObject}
-            onBatchUpdateObjects={handleBatchUpdateObjects}
-            signatureDataUrl={signatureDataUrl}
-            onRequestSignature={() => setShowSignaturePad(true)}
-            onCropApply={handleCropApply}
-            onCropCancel={() => setActiveTool('select')}
-            onDropFile={loadFile}
-            watermarkText={watermarkText}
-          />
+            {!leftCollapsed && (
+              <div
+                className="sidebar-resizer"
+                onMouseDown={(e) => startSidebarResize('left', e)}
+              />
+            )}
 
-          <div className="sidebar-right">
-            <LayersPanel
-              objects={currentPageObjects}
+            <PDFViewer
+              renderDoc={renderDoc}
+              currentPage={currentPage}
+              zoom={zoom}
+              activeTool={activeTool}
+              objects={objects}
+              pageObjects={currentPageObjects}
+              layers={layers}
               selectionIds={selectionIds}
               onSelectionChange={setSelection}
-              onToggleVisible={handleToggleVisible}
-              onToggleLocked={handleToggleLocked}
-              onReorder={handleLayerReorder}
-            />
-            <InspectorPanel
-              selectedObjects={selectedObjects}
+              interactionState={interactionState}
+              setInteractionState={setInteractionState}
+              onAddObject={handleAddObject}
+              onDeleteObject={handleDeleteObject}
               onUpdateObject={handleUpdateObject}
+              onBatchUpdateObjects={handleBatchUpdateObjects}
+              signatureDataUrl={signatureDataUrl}
+              onRequestSignature={() => setShowSignaturePad(true)}
+              onCropApply={handleCropApply}
+              onCropCancel={() => setActiveTool('select')}
+              onDropFile={loadFile}
+              watermarkText={watermarkText}
+              imagePlacement={imagePlacement}
+              onImagePlaced={handleImagePlaced}
+              onImagePlacementCancel={handleImagePlacementCancel}
             />
-            <EvidencePanel
-              markers={evidenceIndex.markers}
-              exhibits={evidenceIndex.exhibits}
-              onJumpToPage={setCurrentPage}
-              onExportBundle={handleExportEvidenceBundle}
-            />
-            <CaseGraph
-              graph={caseGraph}
-              onNavigate={setCurrentPage}
-            />
-            <AvaPanel onAsk={handleAskAva} />
-          </div>
-        </>
+
+            {!rightCollapsed && (
+              <div
+                className="sidebar-resizer"
+                onMouseDown={(e) => startSidebarResize('right', e)}
+              />
+            )}
+
+            {rightCollapsed ? (
+              <div className="sidebar-collapsed right">
+                <button onClick={() => setRightCollapsed(false)} title="Show Panels">
+                  <PanelRightOpen size={18} />
+                </button>
+                <button onClick={() => { setRightPanelTab('layers'); setRightCollapsed(false); }} title="Layers">
+                  <LayersIcon size={16} />
+                </button>
+                <button onClick={() => { setRightPanelTab('inspector'); setRightCollapsed(false); }} title="Inspector">
+                  <SlidersHorizontal size={16} />
+                </button>
+                <button onClick={() => { setRightPanelTab('evidence'); setRightCollapsed(false); }} title="Evidence">
+                  <Shield size={16} />
+                </button>
+                <button onClick={() => { setRightPanelTab('caseGraph'); setRightCollapsed(false); }} title="Case Graph">
+                  <Network size={16} />
+                </button>
+                <button onClick={() => { setRightPanelTab('ava'); setRightCollapsed(false); }} title="Ava">
+                  <MessageSquare size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="sidebar-right" style={{ width: rightSidebarWidth }}>
+                <div className="sidebar-header">
+                  Panels
+                  <button onClick={() => setRightCollapsed(true)} title="Collapse sidebar">
+                    <PanelRightClose size={16} />
+                  </button>
+                </div>
+                <div className="sidebar-tabs">
+                  <button
+                    className={rightPanelTab === 'layers' ? 'active' : ''}
+                    onClick={() => setRightPanelTab('layers')}
+                    title="Layers"
+                  >
+                    <LayersIcon size={16} />
+                  </button>
+                  <button
+                    className={rightPanelTab === 'inspector' ? 'active' : ''}
+                    onClick={() => setRightPanelTab('inspector')}
+                    title="Inspector"
+                  >
+                    <SlidersHorizontal size={16} />
+                  </button>
+                  <button
+                    className={rightPanelTab === 'evidence' ? 'active' : ''}
+                    onClick={() => setRightPanelTab('evidence')}
+                    title="Evidence"
+                  >
+                    <Shield size={16} />
+                  </button>
+                  <button
+                    className={rightPanelTab === 'caseGraph' ? 'active' : ''}
+                    onClick={() => setRightPanelTab('caseGraph')}
+                    title="Case Graph"
+                  >
+                    <Network size={16} />
+                  </button>
+                  <button
+                    className={rightPanelTab === 'ava' ? 'active' : ''}
+                    onClick={() => setRightPanelTab('ava')}
+                    title="Ava"
+                  >
+                    <MessageSquare size={16} />
+                  </button>
+                </div>
+                {rightPanelTab === 'layers' && (
+                  <LayersPanel
+                    objects={currentPageObjects}
+                    selectionIds={selectionIds}
+                    onSelectionChange={setSelection}
+                    onToggleVisible={handleToggleVisible}
+                    onToggleLocked={handleToggleLocked}
+                    onReorder={handleLayerReorder}
+                  />
+                )}
+                {rightPanelTab === 'inspector' && (
+                  <InspectorPanel
+                    selectedObjects={selectedObjects}
+                    onUpdateObject={handleUpdateObject}
+                  />
+                )}
+                {rightPanelTab === 'evidence' && (
+                  <EvidencePanel
+                    markers={evidenceIndex.markers}
+                    exhibits={evidenceIndex.exhibits}
+                    onJumpToPage={setCurrentPage}
+                    onExportBundle={handleExportEvidenceBundle}
+                  />
+                )}
+                {rightPanelTab === 'caseGraph' && (
+                  <CaseGraph
+                    graph={caseGraph}
+                    onNavigate={setCurrentPage}
+                  />
+                )}
+                {rightPanelTab === 'ava' && (
+                  <AvaPanel onAsk={handleAskAva} />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 

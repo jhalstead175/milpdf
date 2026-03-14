@@ -6,6 +6,7 @@ import { createDrawTool } from './drawTool';
 import { createEditTool } from './editTool';
 import { createCropTool } from './cropTool';
 import { createSignatureTool } from './signatureTool';
+import { createImageTool } from './imageTool';
 
 export function createToolRegistry(ctx) {
   return {
@@ -17,5 +18,6 @@ export function createToolRegistry(ctx) {
     edit: createEditTool(ctx),
     crop: createCropTool(ctx),
     signature: createSignatureTool(ctx),
+    image: createImageTool(ctx),
   };
 }

@@ -225,6 +225,18 @@ export async function embedEditorObjects(currentBytes, objects, layers = null, o
         height: obj.height,
         rotate,
       });
+    } else if (obj.type === 'image') {
+      const isJpg = String(obj.dataUrl || '').startsWith('data:image/jpeg');
+      const imgBytes = await fetch(obj.dataUrl).then(r => r.arrayBuffer());
+      const image = isJpg ? await pdfDoc.embedJpg(imgBytes) : await pdfDoc.embedPng(imgBytes);
+      const { rotate } = transformToPdfLib(obj.transform);
+      page.drawImage(image, {
+        x: obj.pdfX,
+        y: obj.pdfY,
+        width: obj.width,
+        height: obj.height,
+        rotate,
+      });
     } else if (obj.type === 'highlight') {
       page.drawRectangle({
         x: obj.pdfX,

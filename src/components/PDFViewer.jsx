@@ -33,6 +33,9 @@ export default function PDFViewer({
   signatureDataUrl, onRequestSignature,
   onCropApply, onCropCancel,
   onDropFile, watermarkText,
+  imagePlacement,
+  onImagePlaced,
+  onImagePlacementCancel,
 }) {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
@@ -51,6 +54,8 @@ export default function PDFViewer({
   const [redactRect, setRedactRect] = useState(null);
   const [redactStart, setRedactStart] = useState(null);
   const [drawingPoints, setDrawingPoints] = useState(null);
+  const [imageRect, setImageRect] = useState(null);
+  const [imageStart, setImageStart] = useState(null);
   const [selection, setSelection] = useState(() => new Set(selectionIds));
   const [snapGuides, setSnapGuides] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -111,6 +116,7 @@ export default function PDFViewer({
     if (activeTool !== 'highlight') { setHighlightRect(null); setHighlightStart(null); }
     if (activeTool !== 'redact') { setRedactRect(null); setRedactStart(null); }
     if (activeTool !== 'draw') { setDrawingPoints(null); }
+    if (activeTool !== 'image') { setImageRect(null); setImageStart(null); }
     if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
     if (activeTool !== 'text') { setTextBoxRect(null); setTextBoxStart(null); setTextInput(null); }
     if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
@@ -256,6 +262,9 @@ export default function PDFViewer({
     setHighlightStart, setHighlightRect, highlightStart, highlightRect,
     setRedactStart, setRedactRect, redactStart, redactRect,
     setDrawingPoints, drawingPoints, screenToPdfPoint,
+    imagePlacement,
+    setImageRect, setImageStart, imageRect, imageStart,
+    onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
     createBaseObject, onAddObject,
@@ -271,6 +280,9 @@ export default function PDFViewer({
     setHighlightStart, setHighlightRect, highlightStart, highlightRect,
     setRedactStart, setRedactRect, redactStart, redactRect,
     setDrawingPoints, drawingPoints, screenToPdfPoint,
+    imagePlacement,
+    setImageRect, setImageStart, imageRect, imageStart,
+    onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
     createBaseObject, onAddObject,
@@ -405,6 +417,7 @@ export default function PDFViewer({
 
   const showCancelHint = (
     (activeTool === 'draw' && drawingPoints?.length > 0) ||
+    (activeTool === 'image' && imageRect) ||
     (activeTool === 'text' && textBoxRect) ||
     (activeTool === 'highlight' && highlightRect) ||
     (activeTool === 'redact' && redactRect) ||
@@ -591,6 +604,18 @@ export default function PDFViewer({
             }
           }
 
+          if (obj.type === 'image') {
+            return (
+              <div
+                key={obj.id}
+                className={`annotation annotation-${obj.type} ${selection.has(obj.id) ? 'selected' : ''} ${activeTool === 'select' && !obj.locked && !layers?.[obj.layerId]?.locked ? 'draggable' : ''}`}
+                style={style}
+              >
+                <img src={obj.dataUrl} alt={obj.name || 'Image'} draggable={false} />
+              </div>
+            );
+          }
+
           return (
             <div
               key={obj.id}
@@ -634,7 +659,7 @@ export default function PDFViewer({
               {obj.type === 'signature' && (
                 <img src={obj.dataUrl} alt="Signature" draggable={false} />
               )}
-              {['text', 'signature', 'highlight', 'redact', 'whiteout'].includes(obj.type) && !obj.locked && !layers?.[obj.layerId]?.locked && (
+              {['text', 'signature', 'image', 'highlight', 'redact', 'whiteout'].includes(obj.type) && !obj.locked && !layers?.[obj.layerId]?.locked && (
                 <button
                   className="annotation-delete"
                   onClick={(e) => { e.stopPropagation(); onDeleteObject(obj.id); }}
@@ -661,6 +686,20 @@ export default function PDFViewer({
                 strokeLinejoin="round"
               />
             </svg>
+          )}
+
+          {activeTool === 'image' && imageRect && imagePlacement?.dataUrl && (
+            <div
+              className="image-overlay"
+              style={{
+                left: imageRect.x,
+                top: imageRect.y,
+                width: imageRect.width,
+                height: imageRect.height,
+              }}
+            >
+              <img src={imagePlacement.dataUrl} alt="Image preview" draggable={false} />
+            </div>
           )}
 
           {activeTool === 'text' && textBoxRect && (
