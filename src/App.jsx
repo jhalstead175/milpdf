@@ -47,6 +47,8 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 
 function App() {
   const [view, setView] = useState('landing');
+  const kernel = useMemo(() => createKernel(), []);
+  const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
     if (isElectron) setView('editor');
@@ -102,8 +104,6 @@ function App() {
   const [renderDoc, setRenderDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const kernel = useMemo(() => createKernel(), []);
-  const [toasts, setToasts] = useState([]);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [healthReport, setHealthReport] = useState(null);
   const editorStore = useEditorStore([]);
