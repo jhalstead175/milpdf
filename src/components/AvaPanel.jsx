@@ -20,6 +20,17 @@ export default function AvaPanel({ onAsk }) {
     <div className="panel ava-panel">
       <div className="panel-header">Ava (Legal AI)</div>
       <div className="panel-body">
+        <div className="ava-avatar-row">
+          <img
+            className="ava-avatar"
+            src="/images/ava_bridgestone.png"
+            alt="Ava Bridgestone"
+          />
+          <div className="ava-avatar-text">
+            <div className="ava-avatar-name">Ava Bridgestone</div>
+            <div className="ava-avatar-subtitle">Advocate's Bridge</div>
+          </div>
+        </div>
         <div className="field">
           <label>Question</label>
           <textarea

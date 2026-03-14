@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
+import V3AppShell from './app/AppShell';
 import Toolbar from './components/Toolbar';
 import PageThumbnails from './components/PageThumbnails';
 import DocumentNavigator from './components/DocumentNavigator';
@@ -47,6 +48,7 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectr
 
 function App() {
   const [view, setView] = useState('landing');
+  const [showV3, setShowV3] = useState(false);
   const kernel = useMemo(() => createKernel(), []);
   const [toasts, setToasts] = useState([]);
 
@@ -900,6 +902,8 @@ const runDD214Analysis = useCallback(async () => {
         canRedo={canRedo}
         watermarkText={watermarkText}
         canZOrder={selectionIds.length > 0}
+        isV3={showV3}
+        onToggleV3={() => setShowV3(prev => !prev)}
       />
 
       {activeFormProfile && (
@@ -919,71 +923,77 @@ const runDD214Analysis = useCallback(async () => {
       )}
 
       <div className="main-content">
-        <div className="sidebar">
-          <PageThumbnails
-            renderDoc={renderDoc}
-            numPages={numPages}
-            currentPage={currentPage}
-            onPageSelect={setCurrentPage}
-            onReorder={handleReorder}
-          />
-          <DocumentNavigator
-            renderDoc={renderDoc}
-            numPages={numPages}
-            currentPage={currentPage}
-            onPageSelect={setCurrentPage}
-          />
-        </div>
+        {showV3 ? (
+          <V3AppShell />
+        ) : (
+        <>
+          <div className="sidebar">
+            <PageThumbnails
+              renderDoc={renderDoc}
+              numPages={numPages}
+              currentPage={currentPage}
+              onPageSelect={setCurrentPage}
+              onReorder={handleReorder}
+            />
+            <DocumentNavigator
+              renderDoc={renderDoc}
+              numPages={numPages}
+              currentPage={currentPage}
+              onPageSelect={setCurrentPage}
+            />
+          </div>
 
-        <PDFViewer
-          renderDoc={renderDoc}
-          currentPage={currentPage}
-          zoom={zoom}
-          activeTool={activeTool}
-          objects={objects}
-          pageObjects={currentPageObjects}
-          layers={layers}
-          selectionIds={selectionIds}
-          onSelectionChange={setSelection}
-          interactionState={interactionState}
-          setInteractionState={setInteractionState}
-          onAddObject={handleAddObject}
-          onDeleteObject={handleDeleteObject}
-          onUpdateObject={handleUpdateObject}
-          onBatchUpdateObjects={handleBatchUpdateObjects}
-          signatureDataUrl={signatureDataUrl}
-          onRequestSignature={() => setShowSignaturePad(true)}
-          onCropApply={handleCropApply}
-          onCropCancel={() => setActiveTool('select')}
-          onDropFile={loadFile}
-          watermarkText={watermarkText}
-        />
-
-        <div className="sidebar-right">
-          <LayersPanel
-            objects={currentPageObjects}
+          <PDFViewer
+            renderDoc={renderDoc}
+            currentPage={currentPage}
+            zoom={zoom}
+            activeTool={activeTool}
+            objects={objects}
+            pageObjects={currentPageObjects}
+            layers={layers}
             selectionIds={selectionIds}
             onSelectionChange={setSelection}
-            onToggleVisible={handleToggleVisible}
-            onToggleLocked={handleToggleLocked}
-            onReorder={handleLayerReorder}
-          />
-          <InspectorPanel
-            selectedObjects={selectedObjects}
+            interactionState={interactionState}
+            setInteractionState={setInteractionState}
+            onAddObject={handleAddObject}
+            onDeleteObject={handleDeleteObject}
             onUpdateObject={handleUpdateObject}
+            onBatchUpdateObjects={handleBatchUpdateObjects}
+            signatureDataUrl={signatureDataUrl}
+            onRequestSignature={() => setShowSignaturePad(true)}
+            onCropApply={handleCropApply}
+            onCropCancel={() => setActiveTool('select')}
+            onDropFile={loadFile}
+            watermarkText={watermarkText}
           />
-          <EvidencePanel
-            markers={evidenceIndex.markers}
-            exhibits={evidenceIndex.exhibits}
-            onJumpToPage={setCurrentPage}
-            onExportBundle={handleExportEvidenceBundle}
-          />
-          <CaseGraph
-            graph={caseGraph}
-            onNavigate={setCurrentPage}
-          />
-          <AvaPanel onAsk={handleAskAva} />
-        </div>
+
+          <div className="sidebar-right">
+            <LayersPanel
+              objects={currentPageObjects}
+              selectionIds={selectionIds}
+              onSelectionChange={setSelection}
+              onToggleVisible={handleToggleVisible}
+              onToggleLocked={handleToggleLocked}
+              onReorder={handleLayerReorder}
+            />
+            <InspectorPanel
+              selectedObjects={selectedObjects}
+              onUpdateObject={handleUpdateObject}
+            />
+            <EvidencePanel
+              markers={evidenceIndex.markers}
+              exhibits={evidenceIndex.exhibits}
+              onJumpToPage={setCurrentPage}
+              onExportBundle={handleExportEvidenceBundle}
+            />
+            <CaseGraph
+              graph={caseGraph}
+              onNavigate={setCurrentPage}
+            />
+            <AvaPanel onAsk={handleAskAva} />
+          </div>
+        </>
+        )}
       </div>
 
       {showSignaturePad && (

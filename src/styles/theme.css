@@ -1,0 +1,55 @@
+:root {
+  --background: #0f172a;
+  --panel: #1e293b;
+  --accent: #2563eb;
+  --text: #f8fafc;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--background);
+  color: var(--text);
+}
+
+.app-shell-body {
+  display: flex;
+  flex: 1;
+}
+
+.app-shell-main {
+  flex: 1;
+  padding: 24px;
+}
+
+.app-shell-aside {
+  width: 320px;
+  padding: 16px;
+  background: var(--panel);
+}
+
+.ava-intro {
+  background: var(--panel);
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 520px;
+}
+
+.ava-intro-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+  margin-bottom: 12px;
+}
+
+.v3-preview-note {
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--text);
+  font-size: 12px;
+}

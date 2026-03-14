@@ -14,6 +14,8 @@ export default function Toolbar({
   zoom, currentPage, numPages,
   canUndo, canRedo, canZOrder,
   watermarkText,
+  isV3,
+  onToggleV3,
 }) {
   return (
     <div className="toolbar">
@@ -139,6 +141,16 @@ export default function Toolbar({
           <button onClick={() => runCommand('page.next')} disabled={!hasDoc || currentPage >= numPages}>
             <ChevronRight {...IC} />
           </button>
+        </div>
+      </div>
+
+      <div className="toolbar-section">
+        <span className="toolbar-label">Mode</span>
+        <div className="toolbar-group">
+          <button onClick={onToggleV3} title="Toggle v3 shell preview">
+            {isV3 ? 'Editor' : 'V3 Shell'}
+          </button>
+          <span className="mode-badge">Preview</span>
         </div>
       </div>
     </div>
