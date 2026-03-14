@@ -633,6 +633,12 @@ const runDD214Analysis = useCallback(async () => {
     batchUpdateObjects(patches);
   }, [batchUpdateObjects]);
 
+  const evidenceIndex = useMemo(() => buildEvidenceIndex(objects), [objects]);
+  const caseGraph = useMemo(() => buildCaseGraph({
+    evidenceIndex,
+    pages,
+  }), [evidenceIndex, pages]);
+
   const handleExportEvidenceBundle = useCallback(async ({ prefix, startNumber }) => {
     if (!pdfBytes) return;
     setLoading(true);
@@ -697,12 +703,6 @@ const runDD214Analysis = useCallback(async () => {
     () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
     [formProfileKey]
   );
-  const evidenceIndex = useMemo(() => buildEvidenceIndex(objects), [objects]);
-  const caseGraph = useMemo(() => buildCaseGraph({
-    evidenceIndex,
-    pages,
-  }), [evidenceIndex, pages]);
-
   const handleCopy = useCallback(() => {
     copyObjects(objects, selectedSet);
   }, [objects, selectedSet]);
