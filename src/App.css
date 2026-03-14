@@ -526,6 +526,31 @@ html.editor-active #root {
   gap: 12px;
 }
 
+.ava-status {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid #313244;
+}
+
+.ava-status.connected {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.ava-status.offline {
+  color: #f38ba8;
+  border-color: rgba(243, 139, 168, 0.4);
+}
+
+.ava-status.checking {
+  color: #a6adc8;
+  border-color: #313244;
+}
+
 .ava-response {
   border: 1px solid #313244;
   border-radius: 8px;
@@ -1673,8 +1698,9 @@ html.editor-active #root {
 }
 
 .cmd-results {
-  max-height: 360px;
+  max-height: 400px;
   overflow-y: auto;
+  padding-bottom: 6px;
 }
 
 .cmd-group {
@@ -1695,10 +1721,15 @@ html.editor-active #root {
   gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
+  border-radius: 8px;
 }
 
 .cmd-item.highlighted {
   background: rgba(52, 211, 153, 0.1);
+}
+
+.cmd-item:hover {
+  background: rgba(49, 50, 68, 0.8);
 }
 
 .cmd-item.destructive {

@@ -14,29 +14,55 @@ export default function CommandPalette({ isOpen, onClose, commands, onExecute, h
 
   const results = useCallback(() => {
     const q = query.toLowerCase().trim();
+    const allowed = commands.filter(cmd => !cmd.requiresDoc || hasDoc);
     if (!q) {
-      const recent = JSON.parse(localStorage.getItem('cmd_recent') || '[]');
-      return commands
-        .filter(cmd => !cmd.requiresDoc || hasDoc)
-        .sort((a, b) => recent.indexOf(b.id) - recent.indexOf(a.id))
+      const recentIds = JSON.parse(localStorage.getItem('cmd_recent') || '[]');
+      const recent = recentIds
+        .map(id => allowed.find(cmd => cmd.id === id))
+        .filter(Boolean)
         .slice(0, 8);
+      if (recent.length > 0) {
+        return { items: recent, mode: 'recent' };
+      }
+      return { items: allowed.slice(0, 10), mode: 'all' };
     }
 
-    return commands
-      .filter(cmd => !cmd.requiresDoc || hasDoc)
-      .map(cmd => {
-        const label = cmd.label.toLowerCase();
-        const labelMatch = label.includes(q);
-        const exactLabel = label.startsWith(q);
-        const kwMatch = (cmd.keywords || []).some(k => k.includes(q));
-        const score = (exactLabel ? 100 : 0) + (labelMatch ? 50 : 0) + (kwMatch ? 20 : 0);
-        return { cmd, score };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ cmd }) => cmd)
-      .slice(0, 10);
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const scored = allowed.map(cmd => {
+      const label = cmd.label.toLowerCase();
+      const id = cmd.id.toLowerCase();
+      const category = (cmd.category || '').toLowerCase();
+      const keywords = (cmd.keywords || []).map(k => k.toLowerCase());
+      let score = 0;
+
+      const scoreToken = (token) => {
+        if (label.startsWith(token)) score += 120;
+        if (label.includes(token)) score += 60;
+        if (id.includes(token)) score += 25;
+        if (category.includes(token)) score += 15;
+        if (keywords.some(k => k.includes(token))) score += 30;
+        if (cmd.shortcut && cmd.shortcut.toLowerCase().includes(token)) score += 10;
+      };
+
+      tokens.forEach(scoreToken);
+      return { cmd, score };
+    });
+
+    return {
+      items: scored
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map(({ cmd }) => cmd)
+        .slice(0, 12),
+      mode: 'search',
+    };
   }, [query, commands, hasDoc])();
+
+  useEffect(() => {
+    if (highlighted > results.items.length - 1) {
+      setHighlighted(0);
+    }
+  }, [results.items.length, highlighted]);
 
   const executeCommand = useCallback((cmd) => {
     const recent = JSON.parse(localStorage.getItem('cmd_recent') || '[]');
@@ -51,31 +77,41 @@ export default function CommandPalette({ isOpen, onClose, commands, onExecute, h
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlighted(h => Math.min(h + 1, results.length - 1));
+      setHighlighted(h => Math.min(h + 1, results.items.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlighted(h => Math.max(h - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (results[highlighted]) executeCommand(results[highlighted]);
+      if (results.items[highlighted]) executeCommand(results.items[highlighted]);
     } else if (e.key === 'Escape') {
       onClose();
     }
-  }, [results, highlighted, executeCommand, onClose]);
+  }, [results.items, highlighted, executeCommand, onClose]);
 
   if (!isOpen) return null;
 
-  const grouped = results.reduce((acc, cmd) => {
-    if (!acc[cmd.category]) acc[cmd.category] = [];
-    acc[cmd.category].push(cmd);
-    return acc;
-  }, {});
+  const grouped = (() => {
+    if (results.mode === 'recent') {
+      return [{ label: 'Recent', items: results.items }];
+    }
+    if (results.mode === 'all') {
+      return [{ label: 'Commands', items: results.items }];
+    }
+    const map = new Map();
+    results.items.forEach(cmd => {
+      const label = cmd.category || 'Commands';
+      if (!map.has(label)) map.set(label, []);
+      map.get(label).push(cmd);
+    });
+    return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
+  })();
 
   return (
     <div className="cmd-backdrop" onClick={onClose}>
       <div className="cmd-palette" onClick={e => e.stopPropagation()}>
         <div className="cmd-input-row">
-          <span className="cmd-search-icon">*</span>
+          <span className="cmd-search-icon">⌕</span>
           <input
             ref={inputRef}
             className="cmd-input"
@@ -88,11 +124,11 @@ export default function CommandPalette({ isOpen, onClose, commands, onExecute, h
         </div>
 
         <div className="cmd-results">
-          {Object.entries(grouped).map(([category, cmds]) => (
-            <div key={category} className="cmd-group">
-              <div className="cmd-group-label">{category}</div>
-              {cmds.map((cmd) => {
-                const globalIdx = results.indexOf(cmd);
+          {grouped.map(group => (
+            <div key={group.label} className="cmd-group">
+              <div className="cmd-group-label">{group.label}</div>
+              {group.items.map((cmd) => {
+                const globalIdx = results.items.indexOf(cmd);
                 return (
                   <div
                     key={cmd.id}
@@ -107,7 +143,7 @@ export default function CommandPalette({ isOpen, onClose, commands, onExecute, h
               })}
             </div>
           ))}
-          {results.length === 0 && (
+          {results.items.length === 0 && (
             <div className="cmd-empty">No commands found for "{query}"</div>
           )}
         </div>
