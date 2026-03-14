@@ -22,13 +22,14 @@ html.editor-active #root {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 12px;
   background: #1e1e2e;
   border-bottom: 1px solid #313244;
   flex-shrink: 0;
   flex-wrap: wrap;
-  overflow: visible;
+  align-content: flex-start;
+  overflow-x: hidden;
 }
 
 .toolbar-brand {
@@ -596,7 +597,6 @@ html.editor-active #root {
 .thumbnail-item canvas {
   width: 100%;
   height: auto;
-  aspect-ratio: 8.5 / 11;
   display: block;
 }
 
@@ -1161,6 +1161,19 @@ html.editor-active #root {
   position: absolute;
   background: rgba(52, 211, 153, 0.85);
   box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.2);
+  pointer-events: none;
+}
+
+.overlay-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #f8fafc;
+  font-size: 12px;
+  letter-spacing: 0.2px;
   pointer-events: none;
 }
 

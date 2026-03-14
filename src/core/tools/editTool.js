@@ -32,5 +32,9 @@ export function createEditTool(ctx) {
       }
       setEditStart(null);
     },
+    onCancel() {
+      setEditRect(null);
+      setEditStart(null);
+    },
   };
 }

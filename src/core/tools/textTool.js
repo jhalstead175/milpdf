@@ -34,5 +34,9 @@ export function createTextTool(ctx) {
       }
       setTextBoxStart(null);
     },
+    onCancel() {
+      setTextBoxRect(null);
+      setTextBoxStart(null);
+    },
   };
 }

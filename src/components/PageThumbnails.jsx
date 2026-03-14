@@ -12,7 +12,10 @@ export default function PageThumbnails({
   return (
     <div className="page-thumbnails">
       <h3>Pages</h3>
-      <div className="thumbnail-list">
+      <div
+        className="thumbnail-list"
+        onDragOver={(e) => e.preventDefault()}
+      >
         {Array.from({ length: numPages }, (_, i) => (
           <ThumbnailItem
             key={`page-${i}-${numPages}`}

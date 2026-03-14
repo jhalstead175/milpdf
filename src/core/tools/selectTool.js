@@ -185,5 +185,25 @@ export function createSelectTool(ctx) {
         }));
       }
     },
+    onCancel() {
+      if (!interactionState.mode) return;
+      setInteractionState(prev => ({
+        ...prev,
+        mode: null,
+        startPoint: null,
+        dragObjectIds: [],
+        dragOrigPositions: null,
+        resizeHandle: null,
+        resizeScreenBounds: null,
+        resizePdfBounds: null,
+        resizeOrigPositions: null,
+        rotateCenter: null,
+        rotateStartAngle: null,
+        rotateOrigPositions: null,
+        lassoRect: null,
+        dragPreview: null,
+      }));
+      setSnapGuides([]);
+    },
   };
 }

@@ -32,5 +32,8 @@ export function createDrawTool(ctx) {
       }
       setDrawingPoints(null);
     },
+    onCancel() {
+      setDrawingPoints(null);
+    },
   };
 }

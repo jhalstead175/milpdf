@@ -9,6 +9,7 @@ export function createInteractionState() {
     resizeScreenBounds: null,
     resizePdfBounds: null,
     resizeOrigPositions: null,
+    cropStart: null,
     rotateCenter: null,
     rotateStartAngle: null,
     rotateOrigPositions: null,

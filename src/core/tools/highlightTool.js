@@ -28,5 +28,9 @@ export function createHighlightTool(ctx) {
       }
       setHighlightStart(null);
     },
+    onCancel() {
+      setHighlightRect(null);
+      setHighlightStart(null);
+    },
   };
 }

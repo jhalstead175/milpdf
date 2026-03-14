@@ -28,5 +28,9 @@ export function createRedactTool(ctx) {
       }
       setRedactStart(null);
     },
+    onCancel() {
+      setRedactRect(null);
+      setRedactStart(null);
+    },
   };
 }

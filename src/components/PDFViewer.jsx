@@ -221,7 +221,9 @@ export default function PDFViewer({
       if (obj.locked) continue;
       if (layers?.[obj.layerId]?.locked) continue;
       const bounds = transformedBounds(obj);
-      const screen = pdfRectToScreen(bounds.pdfX, bounds.pdfY, bounds.width, bounds.height);
+      const width = Math.max(bounds.width, (obj.fontSize || 12) * 0.6);
+      const height = Math.max(bounds.height, obj.fontSize || 12);
+      const screen = pdfRectToScreen(bounds.pdfX, bounds.pdfY, width, height);
       const hitPad = 6;
       const hit = {
         left: screen.left - hitPad / 2,
@@ -275,6 +277,18 @@ export default function PDFViewer({
   ]);
 
   const toolRegistry = useMemo(() => createToolRegistry(toolContext), [toolContext]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== 'Escape') return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      const tool = toolRegistry[activeTool];
+      if (tool?.onCancel) tool.onCancel(e);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [toolRegistry, activeTool]);
 
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
@@ -339,16 +353,17 @@ export default function PDFViewer({
     }
     setEditInput(null);
   }, [editInput, screenRectToPdf, onAddObject, createBaseObject]);
-  const handleMouseDown = useCallback((e) => {
+  const handlePointerDown = useCallback((e) => {
     if (!canvasRef.current) return;
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     const tool = toolRegistry[activeTool];
     if (!tool?.onMouseDown) return;
     const pos = getCanvasPos(e);
     tool.onMouseDown(e, pos);
   }, [activeTool, toolRegistry, getCanvasPos]);
 
-
-  const handleMouseMove = useCallback((e) => {
+  const handlePointerMove = useCallback((e) => {
     if (!canvasRef.current) return;
     const pos = getCanvasPos(e);
 
@@ -356,9 +371,15 @@ export default function PDFViewer({
     if (!tool?.onMouseMove) return;
     tool.onMouseMove(e, pos);
   }, [getCanvasPos, toolRegistry, activeTool]);
-  const handleMouseUp = useCallback((e) => {
+  const handlePointerUp = useCallback((e) => {
     const tool = toolRegistry[activeTool];
     if (tool?.onMouseUp) tool.onMouseUp(e);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  }, [toolRegistry, activeTool]);
+  const handlePointerCancel = useCallback((e) => {
+    const tool = toolRegistry[activeTool];
+    if (tool?.onCancel) tool.onCancel(e);
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
   }, [toolRegistry, activeTool]);
 
   const handleCropApply = useCallback(() => {
@@ -381,6 +402,15 @@ export default function PDFViewer({
   const selectionScreen = selectionBounds
     ? pdfRectToScreen(selectionBounds.pdfX, selectionBounds.pdfY, selectionBounds.width, selectionBounds.height)
     : null;
+
+  const showCancelHint = (
+    (activeTool === 'draw' && drawingPoints?.length > 0) ||
+    (activeTool === 'text' && textBoxRect) ||
+    (activeTool === 'highlight' && highlightRect) ||
+    (activeTool === 'redact' && redactRect) ||
+    (activeTool === 'edit' && editRect) ||
+    (activeTool === 'crop' && cropRect)
+  );
 
   const handleResizeStart = useCallback((e, handle) => {
     if (!selectionBounds || !selectionScreen) return;
@@ -417,10 +447,11 @@ export default function PDFViewer({
     >
       <div
         className="canvas-container"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onPointerLeave={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={handlePointerCancel}
       >
         <div className={RENDER_LAYERS.pdf}>
           <canvas
@@ -779,6 +810,10 @@ export default function PDFViewer({
               ? <div key={`snap-x-${i}`} className="snap-guide snap-guide-x" style={{ left: g.left }} />
               : <div key={`snap-y-${i}`} className="snap-guide snap-guide-y" style={{ top: g.top }} />;
           })}
+
+          {showCancelHint && (
+            <div className="overlay-hint">Esc cancels</div>
+          )}
         </div>
 
         <div className={RENDER_LAYERS.selection}>
