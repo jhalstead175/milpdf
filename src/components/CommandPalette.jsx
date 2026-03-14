@@ -1,28 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  MousePointer2, Type, Highlighter, ShieldOff, PenTool,
-  RotateCw, Trash2, FilePlus, FolderOpen, Save, FileStack, Scissors,
-  FileSearch,
-} from 'lucide-react';
-import { COMMAND_REGISTRY } from '../editor/commands/registry';
-
-const ICONS = {
-  MousePointer: MousePointer2,
-  Type,
-  Highlighter,
-  ShieldOff,
-  PenTool,
-  RotateCw,
-  Trash2,
-  FilePlus,
-  FolderOpen,
-  Save,
-  FileStack,
-  Scissors,
-  FileSearch,
-};
-
-export default function CommandPalette({ isOpen, onClose, context }) {
+export default function CommandPalette({ isOpen, onClose, commands, onExecute, hasDoc }) {
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef(null);
@@ -39,19 +16,19 @@ export default function CommandPalette({ isOpen, onClose, context }) {
     const q = query.toLowerCase().trim();
     if (!q) {
       const recent = JSON.parse(localStorage.getItem('cmd_recent') || '[]');
-      return COMMAND_REGISTRY
-        .filter(cmd => !cmd.requiresDoc || context.hasDoc)
+      return commands
+        .filter(cmd => !cmd.requiresDoc || hasDoc)
         .sort((a, b) => recent.indexOf(b.id) - recent.indexOf(a.id))
         .slice(0, 8);
     }
 
-    return COMMAND_REGISTRY
-      .filter(cmd => !cmd.requiresDoc || context.hasDoc)
+    return commands
+      .filter(cmd => !cmd.requiresDoc || hasDoc)
       .map(cmd => {
         const label = cmd.label.toLowerCase();
         const labelMatch = label.includes(q);
         const exactLabel = label.startsWith(q);
-        const kwMatch = cmd.keywords.some(k => k.includes(q));
+        const kwMatch = (cmd.keywords || []).some(k => k.includes(q));
         const score = (exactLabel ? 100 : 0) + (labelMatch ? 50 : 0) + (kwMatch ? 20 : 0);
         return { cmd, score };
       })
@@ -59,7 +36,7 @@ export default function CommandPalette({ isOpen, onClose, context }) {
       .sort((a, b) => b.score - a.score)
       .map(({ cmd }) => cmd)
       .slice(0, 10);
-  }, [query, context.hasDoc])();
+  }, [query, commands, hasDoc])();
 
   const executeCommand = useCallback((cmd) => {
     const recent = JSON.parse(localStorage.getItem('cmd_recent') || '[]');
@@ -67,9 +44,9 @@ export default function CommandPalette({ isOpen, onClose, context }) {
       'cmd_recent',
       JSON.stringify([cmd.id, ...recent.filter(id => id !== cmd.id)].slice(0, 20))
     );
-    cmd.execute(context);
+    onExecute(cmd.id);
     onClose();
-  }, [context, onClose]);
+  }, [onExecute, onClose]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'ArrowDown') {
@@ -116,7 +93,6 @@ export default function CommandPalette({ isOpen, onClose, context }) {
               <div className="cmd-group-label">{category}</div>
               {cmds.map((cmd) => {
                 const globalIdx = results.indexOf(cmd);
-                const Icon = ICONS[cmd.icon] || null;
                 return (
                   <div
                     key={cmd.id}
@@ -124,7 +100,6 @@ export default function CommandPalette({ isOpen, onClose, context }) {
                     onMouseEnter={() => setHighlighted(globalIdx)}
                     onClick={() => executeCommand(cmd)}
                   >
-                    <span className="cmd-icon">{Icon ? <Icon size={16} /> : null}</span>
                     <span className="cmd-label">{highlightMatch(cmd.label, query)}</span>
                     {cmd.shortcut && <kbd className="cmd-shortcut">{cmd.shortcut}</kbd>}
                   </div>

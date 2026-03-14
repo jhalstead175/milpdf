@@ -3,7 +3,10 @@ import { FileSearch } from 'lucide-react';
 import usePageCache from '../hooks/usePageCache';
 import { makeId } from '../utils/id';
 import { identityTransform, transformToCSS, transformedBounds } from '../editor/Transform';
-import { snapPosition, snapGuidesToScreen } from '../editor/snapping';
+import { createToolRegistry } from '../core/tools';
+import { createInteractionState } from '../core/interaction/state';
+import { RENDER_LAYERS } from '../core/rendering/layers';
+import { startResize, startRotate } from '../core/transform';
 import {
   alignLeft, alignRight, alignTop, alignBottom,
   alignCenterH, alignCenterV,
@@ -19,8 +22,12 @@ import {
  */
 export default function PDFViewer({
   renderDoc, currentPage, zoom, activeTool,
-  objects = [], layers = {},
+  objects = [],
+  pageObjects = [],
+  layers = {},
   selectionIds = [],
+  interactionState,
+  setInteractionState,
   onSelectionChange,
   onAddObject, onDeleteObject, onUpdateObject, onBatchUpdateObjects,
   signatureDataUrl, onRequestSignature,
@@ -44,25 +51,22 @@ export default function PDFViewer({
   const [redactRect, setRedactRect] = useState(null);
   const [redactStart, setRedactStart] = useState(null);
   const [drawingPoints, setDrawingPoints] = useState(null);
-  const [dragState, setDragState] = useState(null);
   const [selection, setSelection] = useState(() => new Set(selectionIds));
-  const [lasso, setLasso] = useState(null);
   const [snapGuides, setSnapGuides] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [editRect, setEditRect] = useState(null);
   const [editStart, setEditStart] = useState(null);
   const [editInput, setEditInput] = useState(null);
   const [nativeAnnotations, setNativeAnnotations] = useState([]);
-  const [rotationState, setRotationState] = useState(null);
   const visibleObjects = useMemo(() => (
-    objects
-      .filter(o => o.page === currentPage)
+    pageObjects
       .filter(o => o.visible !== false)
       .filter(o => layers?.[o.layerId]?.visible !== false)
       .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
-  ), [objects, currentPage, layers]);
+  ), [pageObjects, layers]);
 
   const pdfPageHeight = pageSize.height ? pageSize.height / zoom : 0;
+  const pdfPageWidth = pageSize.width ? pageSize.width / zoom : 0;
 
   useEffect(() => {
     setSelection(new Set(selectionIds));
@@ -109,7 +113,8 @@ export default function PDFViewer({
     if (activeTool !== 'draw') { setDrawingPoints(null); }
     if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
     if (activeTool !== 'text') { setTextBoxRect(null); setTextBoxStart(null); setTextInput(null); }
-  }, [activeTool]);
+    if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
+  }, [activeTool, setInteractionState]);
   const getCanvasPos = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -155,13 +160,30 @@ export default function PDFViewer({
     groupId: null,
     locked: false,
     visible: true,
+    name: extra.name ?? type,
+    opacity: extra.opacity ?? 1,
     layerId,
     ...extra,
   }), [currentPage, getNextZIndex]);
 
+  const renderObjects = useMemo(() => {
+    if (!interactionState.dragPreview || interactionState.dragPreview.size === 0) return visibleObjects;
+    return visibleObjects.map(obj => {
+      const preview = interactionState.dragPreview.get(obj.id);
+      return preview ? {
+        ...obj,
+        pdfX: preview.pdfX ?? obj.pdfX,
+        pdfY: preview.pdfY ?? obj.pdfY,
+        width: preview.width ?? obj.width,
+        height: preview.height ?? obj.height,
+        transform: preview.transform ?? obj.transform,
+      } : obj;
+    });
+  }, [visibleObjects, interactionState.dragPreview]);
+
   const selectedObjects = useMemo(
-    () => visibleObjects.filter(o => selection.has(o.id)),
-    [visibleObjects, selection]
+    () => renderObjects.filter(o => selection.has(o.id)),
+    [renderObjects, selection]
   );
 
   const selectionBounds = useMemo(() => {
@@ -194,55 +216,101 @@ export default function PDFViewer({
     if (patches.length > 0) onBatchUpdateObjects(patches);
   }, [onBatchUpdateObjects, selection, objects]);
   const findObjectAt = useCallback((pos) => {
-    const sorted = [...visibleObjects].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0));
+    const sorted = [...renderObjects].sort((a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0));
     for (const obj of sorted) {
       if (obj.locked) continue;
       if (layers?.[obj.layerId]?.locked) continue;
       const bounds = transformedBounds(obj);
       const screen = pdfRectToScreen(bounds.pdfX, bounds.pdfY, bounds.width, bounds.height);
+      const hitPad = 6;
+      const hit = {
+        left: screen.left - hitPad / 2,
+        top: screen.top - hitPad / 2,
+        width: screen.width + hitPad,
+        height: screen.height + hitPad,
+      };
       if (
-        pos.x >= screen.left &&
-        pos.x <= screen.left + screen.width &&
-        pos.y >= screen.top &&
-        pos.y <= screen.top + screen.height
+        pos.x >= hit.left &&
+        pos.x <= hit.left + hit.width &&
+        pos.y >= hit.top &&
+        pos.y <= hit.top + hit.height
       ) {
         return obj;
       }
     }
     return null;
-  }, [visibleObjects, layers, pdfRectToScreen]);
+  }, [renderObjects, layers, pdfRectToScreen]);
+
+  const toolContext = useMemo(() => ({
+    selection, setSelection, onSelectionChange,
+    renderObjects, visibleObjects, layers,
+    interactionState, setInteractionState, setSnapGuides,
+    zoom, pdfPageHeight, pdfPageWidth, screenRectToPdf,
+    onBatchUpdateObjects,
+    findObjectAt,
+    setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
+    setTextInput,
+    setCropStart, setCropRect, cropStart,
+    setHighlightStart, setHighlightRect, highlightStart, highlightRect,
+    setRedactStart, setRedactRect, redactStart, redactRect,
+    setDrawingPoints, drawingPoints, screenToPdfPoint,
+    setEditStart, setEditRect, editStart, editRect, setEditInput,
+    signatureDataUrl, onRequestSignature,
+    createBaseObject, onAddObject,
+  }), [
+    selection, setSelection, onSelectionChange, renderObjects, visibleObjects, layers,
+    interactionState, setInteractionState, setSnapGuides,
+    zoom, pdfPageHeight, pdfPageWidth, screenRectToPdf,
+    onBatchUpdateObjects,
+    findObjectAt,
+    setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
+    setTextInput,
+    setCropStart, setCropRect, cropStart,
+    setHighlightStart, setHighlightRect, highlightStart, highlightRect,
+    setRedactStart, setRedactRect, redactStart, redactRect,
+    setDrawingPoints, drawingPoints, screenToPdfPoint,
+    setEditStart, setEditRect, editStart, editRect, setEditInput,
+    signatureDataUrl, onRequestSignature,
+    createBaseObject, onAddObject,
+  ]);
+
+  const toolRegistry = useMemo(() => createToolRegistry(toolContext), [toolContext]);
 
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
-    if (activeTool !== 'signature') return;
-    if (!signatureDataUrl) {
-      onRequestSignature();
-      return;
-    }
-    const { x, y } = getCanvasPos(e);
-    const rect = screenRectToPdf(x, y, 200, 80);
-    onAddObject(createBaseObject('signature', rect, 'annotations', { dataUrl: signatureDataUrl }));
-  }, [activeTool, signatureDataUrl, onRequestSignature, getCanvasPos, screenRectToPdf, createBaseObject, onAddObject]);
+    const tool = toolRegistry[activeTool];
+    if (!tool?.onClick) return;
+    const pos = getCanvasPos(e);
+    tool.onClick(e, pos);
+  }, [activeTool, toolRegistry, getCanvasPos]);
 
   const handleTextSubmit = useCallback(() => {
     if (textInput && textInput.text.trim()) {
       const width = textAreaRef.current?.offsetWidth ?? textInput.width;
       const height = textAreaRef.current?.offsetHeight ?? textInput.height;
       const rect = screenRectToPdf(textInput.x, textInput.y, width, height);
-      onAddObject(createBaseObject('text', rect, 'markup', {
-        text: textInput.text,
-        fontSize: textInput.fontSize || 16,
-        fontFamily: 'Helvetica',
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        color: '#000000',
-        alignment: 'left',
-        lineHeight: 1.2,
-        autoHeight: false,
-      }));
+      if (textInput.existingId) {
+        onUpdateObject(textInput.existingId, {
+          text: textInput.text,
+          width: rect.width,
+          height: rect.height,
+        });
+      } else {
+        onAddObject(createBaseObject('text', rect, 'markup', {
+          text: textInput.text,
+          fontSize: textInput.fontSize || 16,
+          fontFamily: 'Helvetica',
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          color: '#000000',
+          alignment: 'left',
+          lineHeight: 1.2,
+          autoHeight: false,
+        }));
+      }
     }
     setTextInput(null);
-  }, [textInput, screenRectToPdf, onAddObject, createBaseObject]);
+  }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject]);
 
   const handleEditSubmit = useCallback(() => {
     if (editInput) {
@@ -273,223 +341,25 @@ export default function PDFViewer({
   }, [editInput, screenRectToPdf, onAddObject, createBaseObject]);
   const handleMouseDown = useCallback((e) => {
     if (!canvasRef.current) return;
+    const tool = toolRegistry[activeTool];
+    if (!tool?.onMouseDown) return;
     const pos = getCanvasPos(e);
+    tool.onMouseDown(e, pos);
+  }, [activeTool, toolRegistry, getCanvasPos]);
 
-    if (activeTool === 'select') {
-      const obj = findObjectAt(pos);
-      if (obj) {
-        if (e.shiftKey) {
-          const next = new Set(selection);
-          next.has(obj.id) ? next.delete(obj.id) : next.add(obj.id);
-          setSelection(next);
-          if (onSelectionChange) onSelectionChange([...next]);
-          return;
-        }
-
-        const next = selection.has(obj.id) ? selection : new Set([obj.id]);
-        setSelection(next);
-        if (onSelectionChange) onSelectionChange([...next]);
-        const origPositions = {};
-        for (const id of next) {
-          const o = visibleObjects.find(item => item.id === id);
-          if (o) origPositions[id] = { pdfX: o.pdfX, pdfY: o.pdfY, width: o.width, height: o.height };
-        }
-        setDragState({ ids: [...next], startPos: pos, origPositions });
-      } else {
-        if (!e.shiftKey) {
-          setSelection(new Set());
-          if (onSelectionChange) onSelectionChange([]);
-        }
-        setLasso({ startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, width: 0, height: 0 });
-      }
-      return;
-    }
-
-    if (activeTool === 'text') {
-      setTextBoxStart({ x: pos.x, y: pos.y });
-      setTextBoxRect(null);
-      return;
-    }
-
-    if (activeTool === 'crop') {
-      setCropStart({ x: pos.x, y: pos.y }); setCropRect(null);
-    } else if (activeTool === 'highlight') {
-      setHighlightStart({ x: pos.x, y: pos.y }); setHighlightRect(null);
-    } else if (activeTool === 'redact') {
-      setRedactStart({ x: pos.x, y: pos.y }); setRedactRect(null);
-    } else if (activeTool === 'draw') {
-      setDrawingPoints([screenToPdfPoint(pos.x, pos.y)]);
-    } else if (activeTool === 'edit') {
-      setEditStart({ x: pos.x, y: pos.y }); setEditRect(null);
-    }
-  }, [activeTool, getCanvasPos, findObjectAt, selection, visibleObjects, screenToPdfPoint, onSelectionChange]);
 
   const handleMouseMove = useCallback((e) => {
     if (!canvasRef.current) return;
     const pos = getCanvasPos(e);
 
-    if (rotationState) {
-      const { id, centerX, centerY, startAngle, origRotation } = rotationState;
-      const angle = Math.atan2(pos.y - centerY, pos.x - centerX);
-      const delta = ((angle - startAngle) * 180) / Math.PI;
-      let newRot = origRotation - delta;
-      if (e.shiftKey) newRot = Math.round(newRot / 15) * 15;
-      const obj = objects.find(o => o.id === id);
-      if (obj) {
-        onUpdateObject(id, { transform: { ...(obj.transform ?? identityTransform()), rotation: newRot } });
-      }
-      return;
-    }
-
-    if (dragState) {
-      const dx = (pos.x - dragState.startPos.x) / zoom;
-      const dy = (pos.y - dragState.startPos.y) / zoom;
-      const primaryId = dragState.ids[0];
-      const primary = dragState.origPositions[primaryId];
-      if (!primary) return;
-
-      const otherObjects = visibleObjects.filter(o => !dragState.ids.includes(o.id));
-      const candidateX = primary.pdfX + dx;
-      const candidateY = primary.pdfY - dy;
-      const snap = snapPosition(candidateX, candidateY, primary.width, primary.height, otherObjects, zoom);
-      const snappedDx = snap.snapX - primary.pdfX;
-      const snappedDy = snap.snapY - primary.pdfY;
-      setSnapGuides(snapGuidesToScreen(snap.guides, zoom, pdfPageHeight));
-
-      for (const id of dragState.ids) {
-        const orig = dragState.origPositions[id];
-        if (!orig) continue;
-        onUpdateObject(id, {
-          pdfX: orig.pdfX + snappedDx,
-          pdfY: orig.pdfY + snappedDy,
-        });
-      }
-      return;
-    }
-
-    if (lasso) {
-      setLasso({
-        startX: lasso.startX,
-        startY: lasso.startY,
-        x: Math.min(lasso.startX, pos.x),
-        y: Math.min(lasso.startY, pos.y),
-        width: Math.abs(pos.x - lasso.startX),
-        height: Math.abs(pos.y - lasso.startY),
-      });
-      return;
-    }
-
-    if (activeTool === 'text' && textBoxStart) {
-      setTextBoxRect({
-        x: Math.min(textBoxStart.x, pos.x),
-        y: Math.min(textBoxStart.y, pos.y),
-        width: Math.abs(pos.x - textBoxStart.x),
-        height: Math.abs(pos.y - textBoxStart.y),
-      });
-    } else if (activeTool === 'crop' && cropStart) {
-      setCropRect({
-        x: Math.min(cropStart.x, pos.x), y: Math.min(cropStart.y, pos.y),
-        width: Math.abs(pos.x - cropStart.x), height: Math.abs(pos.y - cropStart.y),
-      });
-    } else if (activeTool === 'highlight' && highlightStart) {
-      setHighlightRect({
-        x: Math.min(highlightStart.x, pos.x), y: Math.min(highlightStart.y, pos.y),
-        width: Math.abs(pos.x - highlightStart.x), height: Math.abs(pos.y - highlightStart.y),
-      });
-    } else if (activeTool === 'redact' && redactStart) {
-      setRedactRect({
-        x: Math.min(redactStart.x, pos.x), y: Math.min(redactStart.y, pos.y),
-        width: Math.abs(pos.x - redactStart.x), height: Math.abs(pos.y - redactStart.y),
-      });
-    } else if (activeTool === 'draw' && drawingPoints) {
-      setDrawingPoints(prev => [...prev, screenToPdfPoint(pos.x, pos.y)]);
-    } else if (activeTool === 'edit' && editStart) {
-      setEditRect({
-        x: Math.min(editStart.x, pos.x), y: Math.min(editStart.y, pos.y),
-        width: Math.abs(pos.x - editStart.x), height: Math.abs(pos.y - editStart.y),
-      });
-    }
-  }, [getCanvasPos, rotationState, dragState, lasso, activeTool, textBoxStart, cropStart,
-    highlightStart, redactStart, drawingPoints, editStart, zoom, pdfPageHeight, visibleObjects,
-    onUpdateObject, objects, screenToPdfPoint]);
-  const handleMouseUp = useCallback(() => {
-    if (dragState) {
-      setDragState(null);
-      setSnapGuides([]);
-    }
-
-    if (lasso && lasso.width > 4 && lasso.height > 4) {
-      const rect = screenRectToPdf(lasso.x, lasso.y, lasso.width, lasso.height);
-      const hits = visibleObjects.filter(obj => {
-        if (obj.locked) return false;
-        if (layers?.[obj.layerId]?.locked) return false;
-        const bounds = transformedBounds(obj);
-        return (
-          bounds.pdfX < rect.pdfX + rect.width &&
-          bounds.pdfX + bounds.width > rect.pdfX &&
-          bounds.pdfY < rect.pdfY + rect.height &&
-          bounds.pdfY + bounds.height > rect.pdfY
-        );
-      });
-      const next = new Set(hits.map(o => o.id));
-      setSelection(next);
-      if (onSelectionChange) onSelectionChange([...next]);
-    }
-    setLasso(null);
-
-    if (activeTool === 'text' && textBoxRect && textBoxRect.width > 5 && textBoxRect.height > 5) {
-      setTextInput({
-        x: textBoxRect.x,
-        y: textBoxRect.y,
-        width: textBoxRect.width,
-        height: textBoxRect.height,
-        text: '',
-        fontSize: 16,
-      });
-      setTextBoxRect(null);
-    }
-    setTextBoxStart(null);
-
-    if (activeTool === 'highlight' && highlightRect && highlightRect.width > 5 && highlightRect.height > 5) {
-      const rect = screenRectToPdf(highlightRect.x, highlightRect.y, highlightRect.width, highlightRect.height);
-      onAddObject(createBaseObject('highlight', rect, 'annotations'));
-      setHighlightRect(null);
-    }
-    setHighlightStart(null);
-
-    if (activeTool === 'redact' && redactRect && redactRect.width > 5 && redactRect.height > 5) {
-      const rect = screenRectToPdf(redactRect.x, redactRect.y, redactRect.width, redactRect.height);
-      onAddObject(createBaseObject('redact', rect, 'annotations'));
-      setRedactRect(null);
-    }
-    setRedactStart(null);
-
-    if (activeTool === 'draw' && drawingPoints && drawingPoints.length > 2) {
-      const xs = drawingPoints.map(p => p.x);
-      const ys = drawingPoints.map(p => p.y);
-      const rect = {
-        pdfX: Math.min(...xs),
-        pdfY: Math.min(...ys),
-        width: Math.max(...xs) - Math.min(...xs),
-        height: Math.max(...ys) - Math.min(...ys),
-      };
-      onAddObject(createBaseObject('drawing', rect, 'annotations', {
-        pdfPoints: drawingPoints,
-        color: '#000000',
-        lineWidth: 2,
-      }));
-    }
-    setDrawingPoints(null);
-
-    if (activeTool === 'edit' && editRect && editRect.width > 5 && editRect.height > 5) {
-      setEditInput({ x: editRect.x, y: editRect.y, width: editRect.width, height: editRect.height, text: '' });
-      setEditRect(null);
-    }
-    setEditStart(null);
-
-    setRotationState(null);
-  }, [dragState, lasso, screenRectToPdf, visibleObjects, layers, activeTool, textBoxRect,
-    highlightRect, redactRect, drawingPoints, editRect, onAddObject, createBaseObject, onSelectionChange]);
+    const tool = toolRegistry[activeTool];
+    if (!tool?.onMouseMove) return;
+    tool.onMouseMove(e, pos);
+  }, [getCanvasPos, toolRegistry, activeTool]);
+  const handleMouseUp = useCallback((e) => {
+    const tool = toolRegistry[activeTool];
+    if (tool?.onMouseUp) tool.onMouseUp(e);
+  }, [toolRegistry, activeTool]);
 
   const handleCropApply = useCallback(() => {
     if (cropRect && cropRect.width > 10 && cropRect.height > 10) {
@@ -508,6 +378,18 @@ export default function PDFViewer({
     if (file && file.type === 'application/pdf') onDropFile(file);
   }, [onDropFile]);
 
+  const selectionScreen = selectionBounds
+    ? pdfRectToScreen(selectionBounds.pdfX, selectionBounds.pdfY, selectionBounds.width, selectionBounds.height)
+    : null;
+
+  const handleResizeStart = useCallback((e, handle) => {
+    if (!selectionBounds || !selectionScreen) return;
+    e.stopPropagation();
+    const pos = getCanvasPos(e);
+    const nextState = startResize(selectionBounds, selectionScreen, selectedObjects, pos, handle);
+    setInteractionState(prev => ({ ...prev, ...nextState }));
+  }, [selectionBounds, selectionScreen, getCanvasPos, selectedObjects, setInteractionState]);
+
   if (!renderDoc) {
     return (
       <div
@@ -525,11 +407,6 @@ export default function PDFViewer({
     );
   }
 
-
-  const selectionScreen = selectionBounds
-    ? pdfRectToScreen(selectionBounds.pdfX, selectionBounds.pdfY, selectionBounds.width, selectionBounds.height)
-    : null;
-
   return (
     <div
       className={`pdf-viewer ${isDragOver ? 'drag-active' : ''}`}
@@ -543,41 +420,44 @@ export default function PDFViewer({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onPointerLeave={handleMouseUp}
       >
-        <canvas
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className={`pdf-canvas tool-${activeTool}`}
-        />
+        <div className={RENDER_LAYERS.pdf}>
+          <canvas
+            ref={canvasRef}
+            onClick={handleCanvasClick}
+            className={`pdf-canvas tool-${activeTool}`}
+          />
+        </div>
 
 
-        {nativeAnnotations.length > 0 && (
-          <svg
-            className="native-annotation-layer"
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-          >
-            {nativeAnnotations.map((ann, i) => {
-              if (!ann.rect) return null;
-              const [x1, y1, x2, y2] = ann.rect;
-              const rect = pdfRectToScreen(x1, y1, x2 - x1, y2 - y1);
-              return (
-                <rect
-                  key={`${ann.id || 'ann'}-${i}`}
-                  x={rect.left}
-                  y={rect.top}
-                  width={rect.width}
-                  height={rect.height}
-                  fill="none"
-                  stroke="rgba(200, 200, 200, 0.35)"
-                  strokeWidth="1"
-                />
-              );
-            })}
-          </svg>
-        )}
+        <div className={RENDER_LAYERS.annotations}>
+          {nativeAnnotations.length > 0 && (
+            <svg
+              className="native-annotation-layer"
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+            >
+              {nativeAnnotations.map((ann, i) => {
+                if (!ann.rect) return null;
+                const [x1, y1, x2, y2] = ann.rect;
+                const rect = pdfRectToScreen(x1, y1, x2 - x1, y2 - y1);
+                return (
+                  <rect
+                    key={`${ann.id || 'ann'}-${i}`}
+                    x={rect.left}
+                    y={rect.top}
+                    width={rect.width}
+                    height={rect.height}
+                    fill="none"
+                    stroke="rgba(200, 200, 200, 0.35)"
+                    strokeWidth="1"
+                  />
+                );
+              })}
+            </svg>
+          )}
 
-        {visibleObjects.map(obj => {
+          {renderObjects.map(obj => {
           const rect = pdfRectToScreen(obj.pdfX, obj.pdfY, obj.width, obj.height);
           const style = {
             left: rect.left,
@@ -587,6 +467,10 @@ export default function PDFViewer({
             transformOrigin: 'center center',
             transform: obj.transform ? transformToCSS(obj.transform) : undefined,
           };
+          if (obj.opacity != null) style.opacity = obj.opacity;
+          if (obj.type === 'highlight' && obj.color) style.backgroundColor = obj.color;
+          if (obj.type === 'redact' && obj.color) style.backgroundColor = obj.color;
+          if (obj.type === 'whiteout' && obj.color) style.backgroundColor = obj.color;
 
           if (obj.type === 'drawing') {
             return (
@@ -679,11 +563,20 @@ export default function PDFViewer({
           return (
             <div
               key={obj.id}
-              className={`annotation annotation-${obj.type} ${activeTool === 'select' ? 'draggable' : ''}`}
-              onMouseDown={(e) => {
+              className={`annotation annotation-${obj.type} ${selection.has(obj.id) ? 'selected' : ''} ${activeTool === 'select' && !obj.locked && !layers?.[obj.layerId]?.locked ? 'draggable' : ''}`}
+              onDoubleClick={(e) => {
                 if (activeTool !== 'select') return;
+                if (obj.type !== 'text') return;
                 e.stopPropagation();
-                handleMouseDown(e);
+                setTextInput({
+                  x: rect.left,
+                  y: rect.top,
+                  width: rect.width,
+                  height: rect.height,
+                  text: obj.text || '',
+                  fontSize: obj.fontSize || 16,
+                  existingId: obj.id,
+                });
               }}
               style={style}
             >
@@ -710,7 +603,7 @@ export default function PDFViewer({
               {obj.type === 'signature' && (
                 <img src={obj.dataUrl} alt="Signature" draggable={false} />
               )}
-              {['text', 'signature', 'highlight', 'redact', 'whiteout'].includes(obj.type) && (
+              {['text', 'signature', 'highlight', 'redact', 'whiteout'].includes(obj.type) && !obj.locked && !layers?.[obj.layerId]?.locked && (
                 <button
                   className="annotation-delete"
                   onClick={(e) => { e.stopPropagation(); onDeleteObject(obj.id); }}
@@ -721,208 +614,228 @@ export default function PDFViewer({
               )}
             </div>
           );
-        })}
+          })}
+        </div>
 
 
-        {activeTool === 'draw' && drawingPoints && drawingPoints.length > 1 && (
-          <svg className="drawing-live" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-            <polyline
-              points={drawingPoints.map(p => `${p.x * zoom},${(pdfPageHeight - p.y) * zoom}`).join(' ')}
-              fill="none"
-              stroke="#000"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
+        <div className={RENDER_LAYERS.overlay}>
+          {activeTool === 'draw' && drawingPoints && drawingPoints.length > 1 && (
+            <svg className="drawing-live" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <polyline
+                points={drawingPoints.map(p => `${p.x * zoom},${(pdfPageHeight - p.y) * zoom}`).join(' ')}
+                fill="none"
+                stroke="#000"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
 
-
-        {activeTool === 'text' && textBoxRect && (
-          <div
-            className="text-box-overlay"
-            style={{
-              left: textBoxRect.x,
-              top: textBoxRect.y,
-              width: textBoxRect.width,
-              height: textBoxRect.height,
-            }}
-          />
-        )}
-
-        {activeTool === 'highlight' && highlightRect && (
-          <div
-            className="highlight-overlay"
-            style={{
-              left: highlightRect.x,
-              top: highlightRect.y,
-              width: highlightRect.width,
-              height: highlightRect.height,
-            }}
-          />
-        )}
-
-        {activeTool === 'redact' && redactRect && (
-          <div
-            className="redact-overlay"
-            style={{
-              left: redactRect.x,
-              top: redactRect.y,
-              width: redactRect.width,
-              height: redactRect.height,
-            }}
-          />
-        )}
-
-        {activeTool === 'edit' && editRect && (
-          <div
-            className="edit-overlay"
-            style={{
-              left: editRect.x,
-              top: editRect.y,
-              width: editRect.width,
-              height: editRect.height,
-            }}
-          />
-        )}
-
-        {editInput && (
-          <div
-            className="edit-input-overlay"
-            style={{
-              left: editInput.x,
-              top: editInput.y,
-              width: editInput.width,
-              height: editInput.height,
-            }}
-          >
-            <input
-              type="text"
-              autoFocus
-              value={editInput.text}
-              onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleEditSubmit();
-                if (e.key === 'Escape') setEditInput(null);
-              }}
-              onBlur={handleEditSubmit}
-              placeholder="Replacement text (optional)..."
-              style={{ width: '100%', height: '100%' }}
-            />
-          </div>
-        )}
-
-
-        {textInput && (
-          <div
-            className="text-input-overlay"
-            style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
-          >
-            <textarea
-              ref={textAreaRef}
-              autoFocus
-              value={textInput.text}
-              onMouseDown={(e) => e.stopPropagation()}
-              onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setTextInput(null);
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
-              }}
-              onBlur={handleTextSubmit}
-              placeholder="Type text..."
-              style={{ width: '100%', height: '100%', resize: 'both' }}
-            />
-          </div>
-        )}
-
-
-        {activeTool === 'crop' && cropRect && (
-          <>
+          {activeTool === 'text' && textBoxRect && (
             <div
-              className="crop-overlay"
+              className="text-box-overlay"
               style={{
-                left: cropRect.x,
-                top: cropRect.y,
-                width: cropRect.width,
-                height: cropRect.height,
+                left: textBoxRect.x,
+                top: textBoxRect.y,
+                width: textBoxRect.width,
+                height: textBoxRect.height,
               }}
             />
+          )}
+
+          {activeTool === 'highlight' && highlightRect && (
             <div
-              className="crop-actions"
+              className="highlight-overlay"
               style={{
-                left: cropRect.x,
-                top: cropRect.y + cropRect.height + 8,
+                left: highlightRect.x,
+                top: highlightRect.y,
+                width: highlightRect.width,
+                height: highlightRect.height,
+              }}
+            />
+          )}
+
+          {activeTool === 'redact' && redactRect && (
+            <div
+              className="redact-overlay"
+              style={{
+                left: redactRect.x,
+                top: redactRect.y,
+                width: redactRect.width,
+                height: redactRect.height,
+              }}
+            />
+          )}
+
+          {activeTool === 'edit' && editRect && (
+            <div
+              className="edit-overlay"
+              style={{
+                left: editRect.x,
+                top: editRect.y,
+                width: editRect.width,
+                height: editRect.height,
+              }}
+            />
+          )}
+
+          {editInput && (
+            <div
+              className="edit-input-overlay"
+              style={{
+                left: editInput.x,
+                top: editInput.y,
+                width: editInput.width,
+                height: editInput.height,
               }}
             >
-              <button onClick={handleCropApply}>Apply Crop</button>
-              <button onClick={() => { setCropRect(null); onCropCancel(); }}>Cancel</button>
-            </div>
-          </>
-        )}
-
-        {lasso && (
-          <div
-            className="lasso-overlay"
-            style={{ left: lasso.x, top: lasso.y, width: lasso.width, height: lasso.height }}
-          />
-        )}
-
-        {snapGuides.map((g, i) => (
-          g.axis === 'x'
-            ? <div key={`snap-x-${i}`} className="snap-guide snap-guide-x" style={{ left: g.left }} />
-            : <div key={`snap-y-${i}`} className="snap-guide snap-guide-y" style={{ top: g.top }} />
-        ))}
-
-        {selectionScreen && selectedObjects.length > 1 && (
-          <div
-            className="align-toolbar"
-            style={{ left: selectionScreen.left, top: selectionScreen.top - 36 }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button title="Align Left" onClick={() => applyAlignment('left')}>L</button>
-            <button title="Align Center" onClick={() => applyAlignment('centerH')}>C</button>
-            <button title="Align Right" onClick={() => applyAlignment('right')}>R</button>
-            <div className="align-divider" />
-            <button title="Align Top" onClick={() => applyAlignment('top')}>T</button>
-            <button title="Align Middle" onClick={() => applyAlignment('centerV')}>M</button>
-            <button title="Align Bottom" onClick={() => applyAlignment('bottom')}>B</button>
-            <div className="align-divider" />
-            <button title="Distribute Horizontally" onClick={() => applyAlignment('distributeH')}>H</button>
-            <button title="Distribute Vertically" onClick={() => applyAlignment('distributeV')}>V</button>
-          </div>
-        )}
-
-        {selectionScreen && (
-          <>
-            <div
-              className="selection-box"
-              style={{ left: selectionScreen.left, top: selectionScreen.top, width: selectionScreen.width, height: selectionScreen.height }}
-            />
-            {selectedObjects.length === 1 && (
-              <div
-                className="rotation-handle"
-                style={{
-                  left: selectionScreen.left + selectionScreen.width / 2 - 5,
-                  top: selectionScreen.top - 18,
+              <input
+                type="text"
+                autoFocus
+                value={editInput.text}
+                onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleEditSubmit();
+                  if (e.key === 'Escape') setEditInput(null);
                 }}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                  const pos = getCanvasPos(e);
-                  const cx = selectionScreen.left + selectionScreen.width / 2;
-                  const cy = selectionScreen.top + selectionScreen.height / 2;
-                  const obj = selectedObjects[0];
-                  setRotationState({
-                    id: obj.id,
-                    centerX: cx,
-                    centerY: cy,
-                    startAngle: Math.atan2(pos.y - cy, pos.x - cx),
-                    origRotation: obj.transform?.rotation ?? 0,
-                  });
+                onBlur={handleEditSubmit}
+                placeholder="Replacement text (optional)..."
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
+          )}
+
+          {textInput && (
+            <div
+              className="text-input-overlay"
+              style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
+            >
+              <textarea
+                ref={textAreaRef}
+                autoFocus
+                value={textInput.text}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setTextInput(null);
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
+                }}
+                onBlur={handleTextSubmit}
+                placeholder="Type text..."
+                style={{ width: '100%', height: '100%', resize: 'both' }}
+              />
+            </div>
+          )}
+
+          {activeTool === 'crop' && cropRect && (
+            <>
+              <div
+                className="crop-overlay"
+                style={{
+                  left: cropRect.x,
+                  top: cropRect.y,
+                  width: cropRect.width,
+                  height: cropRect.height,
                 }}
               />
-            )}
-          </>
-        )}
+              <div
+                className="crop-actions"
+                style={{
+                  left: cropRect.x,
+                  top: cropRect.y + cropRect.height + 8,
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button onClick={handleCropApply}>Apply Crop</button>
+                <button onClick={() => { setCropRect(null); onCropCancel(); }}>Cancel</button>
+              </div>
+            </>
+          )}
+
+          {interactionState.lassoRect && (
+            <div
+              className="lasso-overlay"
+              style={{
+                left: interactionState.lassoRect.x,
+                top: interactionState.lassoRect.y,
+                width: interactionState.lassoRect.width,
+                height: interactionState.lassoRect.height,
+              }}
+            />
+          )}
+
+          {snapGuides.map((g, i) => {
+            if (g.kind === 'segment') {
+              return (
+                <div
+                  key={`snap-seg-${i}`}
+                  className="snap-guide snap-guide-segment"
+                  style={{ left: g.left, top: g.top, width: g.width, height: g.height }}
+                />
+              );
+            }
+            return g.axis === 'x'
+              ? <div key={`snap-x-${i}`} className="snap-guide snap-guide-x" style={{ left: g.left }} />
+              : <div key={`snap-y-${i}`} className="snap-guide snap-guide-y" style={{ top: g.top }} />;
+          })}
+        </div>
+
+        <div className={RENDER_LAYERS.selection}>
+          {selectionScreen && selectedObjects.length > 1 && (
+            <div
+              className="align-toolbar"
+              style={{ left: selectionScreen.left, top: selectionScreen.top - 36 }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <button title="Align Left" onClick={() => applyAlignment('left')}>L</button>
+              <button title="Align Center" onClick={() => applyAlignment('centerH')}>C</button>
+              <button title="Align Right" onClick={() => applyAlignment('right')}>R</button>
+              <div className="align-divider" />
+              <button title="Align Top" onClick={() => applyAlignment('top')}>T</button>
+              <button title="Align Middle" onClick={() => applyAlignment('centerV')}>M</button>
+              <button title="Align Bottom" onClick={() => applyAlignment('bottom')}>B</button>
+              <div className="align-divider" />
+              <button title="Distribute Horizontally" onClick={() => applyAlignment('distributeH')}>H</button>
+              <button title="Distribute Vertically" onClick={() => applyAlignment('distributeV')}>V</button>
+            </div>
+          )}
+
+          {selectionScreen && (
+            <>
+              <div
+                className="selection-box"
+                style={{ left: selectionScreen.left, top: selectionScreen.top, width: selectionScreen.width, height: selectionScreen.height }}
+              />
+              {selectedObjects.length > 0 && selectedObjects.every(obj => !obj.locked && !layers?.[obj.layerId]?.locked) && (
+                <>
+                  <div
+                    className="rotation-handle"
+                    style={{
+                      left: selectionScreen.left + selectionScreen.width / 2 - 5,
+                      top: selectionScreen.top - 18,
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      const pos = getCanvasPos(e);
+                      const pdfPos = screenToPdfPoint(pos.x, pos.y);
+                      const nextState = startRotate(selectionBounds, selectedObjects, pdfPos);
+                      setInteractionState(prev => ({ ...prev, ...nextState }));
+                    }}
+                  />
+                  <div className="resize-handle handle-nw" style={{ left: selectionScreen.left - 4, top: selectionScreen.top - 4 }} onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+                  <div className="resize-handle handle-n" style={{ left: selectionScreen.left + selectionScreen.width / 2 - 4, top: selectionScreen.top - 4 }} onMouseDown={(e) => handleResizeStart(e, 'n')} />
+                  <div className="resize-handle handle-ne" style={{ left: selectionScreen.left + selectionScreen.width - 4, top: selectionScreen.top - 4 }} onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+                  <div className="resize-handle handle-e" style={{ left: selectionScreen.left + selectionScreen.width - 4, top: selectionScreen.top + selectionScreen.height / 2 - 4 }} onMouseDown={(e) => handleResizeStart(e, 'e')} />
+                  <div className="resize-handle handle-se" style={{ left: selectionScreen.left + selectionScreen.width - 4, top: selectionScreen.top + selectionScreen.height - 4 }} onMouseDown={(e) => handleResizeStart(e, 'se')} />
+                  <div className="resize-handle handle-s" style={{ left: selectionScreen.left + selectionScreen.width / 2 - 4, top: selectionScreen.top + selectionScreen.height - 4 }} onMouseDown={(e) => handleResizeStart(e, 's')} />
+                  <div className="resize-handle handle-sw" style={{ left: selectionScreen.left - 4, top: selectionScreen.top + selectionScreen.height - 4 }} onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+                  <div className="resize-handle handle-w" style={{ left: selectionScreen.left - 4, top: selectionScreen.top + selectionScreen.height / 2 - 4 }} onMouseDown={(e) => handleResizeStart(e, 'w')} />
+                </>
+              )}
+            </>
+          )}
+        </div>
 
         {watermarkText && (
           <div className="watermark-overlay">

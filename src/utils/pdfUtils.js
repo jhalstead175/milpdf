@@ -231,8 +231,8 @@ export async function embedEditorObjects(currentBytes, objects, layers = null, o
         y: obj.pdfY,
         width: obj.width,
         height: obj.height,
-        color: rgb(1, 0.92, 0.23),
-        opacity: 0.35,
+        color: hexToRgbColor(obj.color, rgb(1, 0.92, 0.23)),
+        opacity: obj.opacity ?? 0.35,
       });
     } else if (obj.type === 'redact') {
       page.drawRectangle({
@@ -240,8 +240,8 @@ export async function embedEditorObjects(currentBytes, objects, layers = null, o
         y: obj.pdfY,
         width: obj.width,
         height: obj.height,
-        color: rgb(0, 0, 0),
-        opacity: 1,
+        color: hexToRgbColor(obj.color, rgb(0, 0, 0)),
+        opacity: obj.opacity ?? 1,
       });
     } else if (obj.type === 'whiteout') {
       page.drawRectangle({
@@ -249,8 +249,8 @@ export async function embedEditorObjects(currentBytes, objects, layers = null, o
         y: obj.pdfY,
         width: obj.width,
         height: obj.height,
-        color: rgb(1, 1, 1),
-        opacity: 1,
+        color: hexToRgbColor(obj.color, rgb(1, 1, 1)),
+        opacity: obj.opacity ?? 1,
       });
     } else if (obj.type === 'drawing') {
       const points = obj.pdfPoints || obj.points || [];

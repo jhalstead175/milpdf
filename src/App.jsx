@@ -8,12 +8,19 @@ import PDFViewer from './components/PDFViewer';
 import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
 import ProfileModal from './components/ProfileModal';
-import useHistory from './hooks/useHistory';
+import LayersPanel from './components/LayersPanel';
+import InspectorPanel from './components/InspectorPanel';
+import EvidencePanel from './components/EvidencePanel';
+import CaseGraph from './components/CaseGraph';
+import AvaPanel from './components/AvaPanel';
+import ToastStack from './components/ToastStack';
+import { useEditorStore } from './core/sceneGraph/store';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, imagesToPdf, embedEditorObjects, cropPage,
+  addBlankPage, mergePdf, insertPdf, imagesToPdf, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
+import { embedEditorObjects } from './core/export';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -28,6 +35,12 @@ import {
   distributeHorizontally, distributeVertically,
 } from './editor/alignment';
 import { bringForward, sendBackward, bringToFront, sendToBack } from './editor/zorder';
+import { buildCommandRegistry } from './core/commands/registry';
+import { buildShortcutMap, eventToShortcut } from './core/commands/executor';
+import { buildEvidenceIndex, exportEvidenceBundle } from './core/evidence';
+import { buildCaseGraph } from './core/caseGraph';
+import { buildCaseContext, askAva } from './core/ai';
+import { createKernel, CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG } from './core/kernel';
 import './App.css';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -38,6 +51,39 @@ function App() {
   useEffect(() => {
     if (isElectron) setView('editor');
   }, []);
+
+  useEffect(() => {
+    kernel.init(CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG);
+  }, [kernel]);
+
+  const pushToast = useCallback((toast) => {
+    setToasts(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, ...toast }]);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    const offLoaded = kernel.eventBus.on('document:loaded', ({ pages }) => {
+      pushToast({ type: 'info', title: 'Document Loaded', message: `${pages} pages ready.` });
+    });
+    const offAnn = kernel.eventBus.on('annotation:created', ({ object }) => {
+      pushToast({ type: 'info', title: 'Annotation Added', message: object?.type || 'Annotation' });
+    });
+    const offEvidence = kernel.eventBus.on('evidence:created', ({ object }) => {
+      pushToast({ type: 'success', title: 'Evidence Marker', message: object?.label || 'Evidence marker created.' });
+    });
+    const offTimeline = kernel.eventBus.on('timeline:updated', () => {
+      pushToast({ type: 'info', title: 'Timeline Updated' });
+    });
+    return () => {
+      offLoaded();
+      offAnn();
+      offEvidence();
+      offTimeline();
+    };
+  }, [kernel, pushToast]);
 
   // When switching to editor, lock body scroll and reset scroll position
   useEffect(() => {
@@ -56,24 +102,48 @@ function App() {
   const [renderDoc, setRenderDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [zoom, setZoom] = useState(1.0);
-  const [activeTool, setActiveTool] = useState('select');
+  const kernel = useMemo(() => createKernel(), []);
+  const [toasts, setToasts] = useState([]);
+  const [showHealthModal, setShowHealthModal] = useState(false);
+  const [healthReport, setHealthReport] = useState(null);
+  const editorStore = useEditorStore([]);
+  const {
+    objects,
+    pages,
+    selection,
+    zoom,
+    setZoom,
+    activeTool,
+    setActiveTool,
+    interactionState,
+    setInteractionState,
+    setPageMeta,
+    addObject,
+    addObjects,
+    updateObject,
+    deleteObject,
+    batchUpdateObjects,
+    resetObjects,
+    setSelection,
+    commitHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = editorStore;
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
-  const [selectionIds, setSelectionIds] = useState([]);
+  const selectionIds = selection;
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState(null);
   const [profile, setProfile] = useState(() => loadProfile());
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [formProfileKey, setFormProfileKey] = useState(null);
 
-  // Scene graph: flat array of EditorObjects (MilPDF 2.0 format)
-  // useHistory snapshots the entire array for undo/redo — same mechanism as before.
-  const annHistory = useHistory([]);
   const [layers] = useState({
     base: { name: 'Base PDF', visible: true, locked: true },
     annotations: { name: 'Annotations', visible: true, locked: false },
@@ -87,12 +157,26 @@ function App() {
   const imageInputRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
 
+  const buildPageMeta = useCallback((doc) => (
+    doc.getPages().map((page, index) => ({
+      id: `page-${index + 1}`,
+      number: index + 1,
+      width: page.getWidth(),
+      height: page.getHeight(),
+      rotation: page.getRotation().angle || 0,
+    }))
+  ), []);
+
   const updateFromResult = useCallback((result) => {
     setPdfDoc(result.pdfDoc);
     setPdfBytes(result.bytes);
     setRenderDoc(result.renderDoc);
     setNumPages(result.pdfDoc.getPageCount());
-  }, []);
+    setPageMeta(buildPageMeta(result.pdfDoc));
+    kernel.eventBus.emit('document:loaded', {
+      pages: result.pdfDoc.getPageCount(),
+    });
+  }, [buildPageMeta, setPageMeta, kernel]);
 
   // --- Load a PDF from ArrayBuffer + name ---
   const loadFromBuffer = useCallback(async (buffer, name) => {
@@ -107,8 +191,8 @@ function App() {
           detectFormFields(result.renderDoc, i + 1)
         )
       ).then(pages => pages.flat());
-      annHistory.clear(formFields);
-      setSelectionIds([]);
+      resetObjects(formFields);
+      setSelection([]);
       const fieldNames = formFields.map(f => f.fieldName).filter(Boolean);
       setFormProfileKey(detectFormProfile(fieldNames));
       setActiveTool('select');
@@ -117,7 +201,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [updateFromResult, annHistory]);
+  }, [updateFromResult, resetObjects, setSelection, setActiveTool]);
 
   // --- Load a PDF from File object (browser drag-drop / input) ---
   const loadFile = useCallback(async (file) => {
@@ -151,15 +235,15 @@ function App() {
         setNumPages(result.pdfDoc.getPageCount());
         setCurrentPage(1);
         setFileName('images.pdf');
-        annHistory.set([]);
-        setSelectionIds([]);
+        resetObjects([]);
+        setSelection([]);
         setFormProfileKey(null);
         setView('editor');
       } catch (err) {
         alert('Failed to convert images: ' + err.message);
       }
     });
-  }, [loadFromBuffer, annHistory]);
+  }, [loadFromBuffer, resetObjects, setSelection]);
 
   // --- File operations ---
   const handleOpen = useCallback(async () => {
@@ -184,8 +268,8 @@ function App() {
     setLoading(true);
     try {
       let bytes = pdfBytes;
-      if (annHistory.state.length > 0) {
-        bytes = await embedEditorObjects(bytes, annHistory.state, layers, { flattenForm: true });
+      if (objects.length > 0) {
+        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -203,7 +287,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, fileName, watermarkText, layers]);
+  }, [pdfBytes, objects, fileName, watermarkText, layers]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -280,7 +364,7 @@ function App() {
       const result = await deletePage(pdfDoc, currentPage - 1);
       updateFromResult(result);
       setCurrentPage(Math.min(currentPage, result.pdfDoc.getPageCount()));
-      annHistory.set(prev =>
+      commitHistory(prev =>
         prev
           .filter(a => a.page !== currentPage)
           .map(a => a.page > currentPage ? { ...a, page: a.page - 1 } : a)
@@ -290,7 +374,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, currentPage, numPages, updateFromResult, annHistory]);
+  }, [pdfDoc, currentPage, numPages, updateFromResult, commitHistory]);
 
   const handleRotate = useCallback(async (angle) => {
     if (!pdfDoc) return;
@@ -315,7 +399,7 @@ function App() {
       const result = await reorderPages(pdfBytes, order);
       updateFromResult(result);
       setCurrentPage(toIndex + 1);
-      annHistory.set(prev => prev.map(a => {
+      commitHistory(prev => prev.map(a => {
         const oldPageIndex = a.page - 1;
         const newPos = order.indexOf(oldPageIndex);
         return { ...a, page: newPos + 1 };
@@ -325,7 +409,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, numPages, updateFromResult, annHistory]);
+  }, [pdfBytes, numPages, updateFromResult, commitHistory]);
 
   // --- Watermark ---
   const handleWatermark = useCallback(() => {
@@ -366,8 +450,8 @@ function App() {
     setLoading(true);
     try {
       let bytes = pdfBytes;
-      if (annHistory.state.length > 0) {
-        bytes = await embedEditorObjects(bytes, annHistory.state, layers, { flattenForm: true });
+      if (objects.length > 0) {
+        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -376,7 +460,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, annHistory.state, watermarkText, layers]);
+  }, [pdfBytes, objects, watermarkText, layers]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -442,13 +526,24 @@ const runDD214Analysis = useCallback(async () => {
 
   // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
   const handleAddObject = useCallback((obj) => {
-    annHistory.set(prev => [...prev, obj]);
-  }, [annHistory]);
+    addObject(obj);
+    kernel.eventBus.emit('annotation:created', { object: obj });
+    if (obj?.type === 'evidenceMarker') {
+      kernel.eventBus.emit('evidence:created', { object: obj });
+      if (obj.timestamp) kernel.eventBus.emit('timeline:updated', { object: obj });
+    }
+  }, [addObject, kernel]);
 
   const handleAddObjects = useCallback((newObjects) => {
-    if (!newObjects || newObjects.length === 0) return;
-    annHistory.set(prev => [...prev, ...newObjects]);
-  }, [annHistory]);
+    addObjects(newObjects);
+    newObjects.forEach(obj => {
+      kernel.eventBus.emit('annotation:created', { object: obj });
+      if (obj?.type === 'evidenceMarker') {
+        kernel.eventBus.emit('evidence:created', { object: obj });
+        if (obj.timestamp) kernel.eventBus.emit('timeline:updated', { object: obj });
+      }
+    });
+  }, [addObjects, kernel]);
 
   const runAutoRedact = useCallback(async () => {
     if (!renderDoc) return;
@@ -488,8 +583,8 @@ const runDD214Analysis = useCallback(async () => {
       setNumPages(result.pdfDoc.getPageCount());
       setCurrentPage(1);
       setFileName('images.pdf');
-      annHistory.set([]);
-      setSelectionIds([]);
+      resetObjects([]);
+      setSelection([]);
       setFormProfileKey(null);
     } catch (err) {
       alert('Failed to convert images: ' + err.message);
@@ -497,90 +592,168 @@ const runDD214Analysis = useCallback(async () => {
       setLoading(false);
       e.target.value = '';
     }
-  }, [annHistory]);
+  }, [resetObjects, setSelection]);
 
   const handleDeleteObject = useCallback((id) => {
-    annHistory.set(prev => prev.filter(a => a.id !== id));
-  }, [annHistory]);
+    const obj = objects.find(item => item.id === id);
+    if (!obj) return;
+    if (obj.locked) return;
+    if (layers?.[obj.layerId]?.locked) return;
+    deleteObject(id);
+  }, [objects, layers, deleteObject]);
 
   const handleUpdateObject = useCallback((id, updates) => {
-    annHistory.set(prev =>
-      prev.map(a => a.id === id ? { ...a, ...updates } : a)
-    );
-  }, [annHistory]);
+    updateObject(id, updates);
+    if (updates?.timestamp) kernel.eventBus.emit('timeline:updated', { id, updates });
+  }, [updateObject, kernel]);
 
   const handleBatchUpdateObjects = useCallback((patches) => {
-    if (!patches || patches.length === 0) return;
-    const patchMap = new Map(patches.map(p => [p.id, p]));
-    annHistory.set(prev =>
-      prev.map(obj => patchMap.has(obj.id) ? { ...obj, ...patchMap.get(obj.id) } : obj)
-    );
-  }, [annHistory]);
+    batchUpdateObjects(patches);
+  }, [batchUpdateObjects]);
+
+  const handleToggleVisible = useCallback((id) => {
+    const obj = objects.find(item => item.id === id);
+    if (!obj) return;
+    updateObject(id, { visible: obj.visible === false });
+  }, [objects, updateObject]);
+
+  const handleToggleLocked = useCallback((id) => {
+    const obj = objects.find(item => item.id === id);
+    if (!obj) return;
+    updateObject(id, { locked: !obj.locked });
+  }, [objects, updateObject]);
+
+  const handleLayerReorder = useCallback((orderedIds) => {
+    if (!orderedIds || orderedIds.length === 0) return;
+    const maxIndex = orderedIds.length - 1;
+    const patches = orderedIds.map((id, index) => ({
+      id,
+      zIndex: maxIndex - index,
+    }));
+    batchUpdateObjects(patches);
+  }, [batchUpdateObjects]);
+
+  const handleExportEvidenceBundle = useCallback(async ({ prefix, startNumber }) => {
+    if (!pdfBytes) return;
+    setLoading(true);
+    try {
+      const bytes = await exportEvidenceBundle({
+        pdfBytes,
+        exhibits: evidenceIndex.exhibits,
+        markers: evidenceIndex.markers,
+        batesPrefix: prefix || 'MILPDF-',
+        batesStartNumber: startNumber || 1,
+        title: 'Evidence Bundle',
+      });
+      const filename = fileName.replace(/\.pdf$/i, '_evidence_bundle.pdf');
+      if (isElectron) {
+        const base64 = btoa(
+          new Uint8Array(bytes).reduce((s, b) => s + String.fromCharCode(b), '')
+        );
+        await window.electronAPI.saveFileDialog(filename, base64);
+      } else {
+        await saveWithDialog(bytes, filename);
+      }
+    } catch (err) {
+      alert('Failed to export evidence bundle: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, evidenceIndex, fileName]);
+
+  const handleAskAva = useCallback(async (question) => {
+    const context = await buildCaseContext({
+      renderDoc,
+      evidenceIndex,
+      caseGraph,
+    });
+    return askAva(question, context);
+  }, [renderDoc, evidenceIndex, caseGraph]);
+
+  const handleKernelHealthCheck = useCallback(() => {
+    try {
+      const report = kernel.commandBus.execute('plugin.health.check');
+      setHealthReport(report || { services: [], timestamp: new Date().toISOString() });
+      setShowHealthModal(true);
+    } catch (err) {
+      pushToast({ type: 'info', title: 'Kernel Health', message: err.message });
+    }
+  }, [kernel, pushToast]);
 
   useEffect(() => {
-    setSelectionIds(prev => prev.filter(id => annHistory.state.some(o => o.id === id)));
-  }, [annHistory.state]);
+    setSelection(prev => prev.filter(id => objects.some(o => o.id === id)));
+  }, [objects, setSelection]);
 
   const selectedSet = useMemo(() => new Set(selectionIds), [selectionIds]);
   const selectedObjects = useMemo(
-    () => annHistory.state.filter(o => selectedSet.has(o.id)),
-    [annHistory.state, selectedSet]
+    () => objects.filter(o => selectedSet.has(o.id)),
+    [objects, selectedSet]
+  );
+  const currentPageObjects = useMemo(
+    () => pages[currentPage - 1]?.objects || [],
+    [pages, currentPage]
   );
   const activeFormProfile = useMemo(
     () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
     [formProfileKey]
   );
+  const evidenceIndex = useMemo(() => buildEvidenceIndex(objects), [objects]);
+  const caseGraph = useMemo(() => buildCaseGraph({
+    evidenceIndex,
+    pages,
+  }), [evidenceIndex, pages]);
 
   const handleCopy = useCallback(() => {
-    copyObjects(annHistory.state, selectedSet);
-  }, [annHistory.state, selectedSet]);
+    copyObjects(objects, selectedSet);
+  }, [objects, selectedSet]);
 
   const handlePaste = useCallback(() => {
     const pasted = pasteObjects(currentPage);
     handleAddObjects(pasted);
-    setSelectionIds(pasted.map(o => o.id));
-  }, [currentPage, handleAddObjects]);
+    setSelection(pasted.map(o => o.id));
+  }, [currentPage, handleAddObjects, setSelection]);
 
   const handleDuplicate = useCallback(() => {
-    const duplicated = duplicateObjects(annHistory.state, selectedSet);
+    const duplicated = duplicateObjects(objects, selectedSet);
     handleAddObjects(duplicated);
-    setSelectionIds(duplicated.map(o => o.id));
-  }, [annHistory.state, selectedSet, handleAddObjects]);
+    setSelection(duplicated.map(o => o.id));
+  }, [objects, selectedSet, handleAddObjects, setSelection]);
 
   const handleAutoFill = useCallback(() => {
     if (!activeFormProfile) return;
-    const filled = autofillScene(annHistory.state, profile, activeFormProfile);
-    annHistory.set(filled);
-  }, [activeFormProfile, annHistory, profile]);
+    const filled = autofillScene(objects, profile, activeFormProfile);
+    commitHistory(filled);
+  }, [activeFormProfile, commitHistory, objects, profile]);
 
   const handleAlignment = useCallback((type) => {
     if (selectedSet.size < 2) return;
     let patches = [];
-    if (type === 'left') patches = alignLeft(annHistory.state, selectedSet);
-    else if (type === 'right') patches = alignRight(annHistory.state, selectedSet);
-    else if (type === 'top') patches = alignTop(annHistory.state, selectedSet);
-    else if (type === 'bottom') patches = alignBottom(annHistory.state, selectedSet);
-    else if (type === 'centerH') patches = alignCenterH(annHistory.state, selectedSet);
-    else if (type === 'centerV') patches = alignCenterV(annHistory.state, selectedSet);
-    else if (type === 'distributeH') patches = distributeHorizontally(annHistory.state, selectedSet);
-    else if (type === 'distributeV') patches = distributeVertically(annHistory.state, selectedSet);
+    if (type === 'left') patches = alignLeft(objects, selectedSet);
+    else if (type === 'right') patches = alignRight(objects, selectedSet);
+    else if (type === 'top') patches = alignTop(objects, selectedSet);
+    else if (type === 'bottom') patches = alignBottom(objects, selectedSet);
+    else if (type === 'centerH') patches = alignCenterH(objects, selectedSet);
+    else if (type === 'centerV') patches = alignCenterV(objects, selectedSet);
+    else if (type === 'distributeH') patches = distributeHorizontally(objects, selectedSet);
+    else if (type === 'distributeV') patches = distributeVertically(objects, selectedSet);
     handleBatchUpdateObjects(patches);
-  }, [annHistory.state, selectedSet, handleBatchUpdateObjects]);
+  }, [objects, selectedSet, handleBatchUpdateObjects]);
 
   const handleZOrder = useCallback((type) => {
     if (selectionIds.length === 0) return;
     const id = selectionIds[0];
     let patches = [];
-    if (type === 'forward') patches = bringForward(annHistory.state, id);
-    else if (type === 'backward') patches = sendBackward(annHistory.state, id);
-    else if (type === 'front') patches = bringToFront(annHistory.state, id);
-    else if (type === 'back') patches = sendToBack(annHistory.state, id);
+    if (type === 'forward') patches = bringForward(objects, id);
+    else if (type === 'backward') patches = sendBackward(objects, id);
+    else if (type === 'front') patches = bringToFront(objects, id);
+    else if (type === 'back') patches = sendToBack(objects, id);
     handleBatchUpdateObjects(patches);
-  }, [annHistory.state, selectionIds, handleBatchUpdateObjects]);
+  }, [objects, selectionIds, handleBatchUpdateObjects]);
 
   const commandContext = useMemo(() => ({
     hasDoc: !!renderDoc,
     setActiveTool,
+    handleToolChange,
     handleOpen,
     handleSave,
     handleMerge,
@@ -590,10 +763,14 @@ const runDD214Analysis = useCallback(async () => {
     handleDeletePage,
     handlePrint,
     handleExportWord,
+    handleWatermark,
+    handleImagesToPdf,
     setShowSignaturePad,
     signatureDataUrl,
     setZoom,
-    fitZoom: () => setZoom(1.0),
+    setCurrentPage,
+    numPages,
+    toggleCommandPalette: () => setShowCommandPalette(p => !p),
     setActiveWorkflow,
     runDD214Analysis,
     runAutoRedact,
@@ -602,19 +779,40 @@ const runDD214Analysis = useCallback(async () => {
     handleCopy,
     handlePaste,
     handleDuplicate,
+    undo,
+    redo,
     openProfile: () => setShowProfileModal(true),
     autoFillProfile: handleAutoFill,
-  }), [renderDoc, setActiveTool, handleOpen, handleSave, handleMerge, handleSplit, handleRotate,
-    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, signatureDataUrl, setZoom,
-    setActiveWorkflow, runDD214Analysis, runAutoRedact, handleAlignment, handleZOrder,
-    handleCopy, handlePaste, handleDuplicate, handleAutoFill, setShowProfileModal]);
+    runKernelHealthCheck: handleKernelHealthCheck,
+  }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleMerge, handleSplit, handleRotate,
+    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImagesToPdf,
+    signatureDataUrl, setZoom, setCurrentPage, numPages, setActiveWorkflow, runDD214Analysis,
+    runAutoRedact, handleAlignment, handleZOrder, handleCopy, handlePaste, handleDuplicate,
+    undo, redo, handleAutoFill, setShowProfileModal, handleKernelHealthCheck]);
+
+  const commands = useMemo(() => buildCommandRegistry(commandContext), [commandContext]);
+
+  useEffect(() => {
+    commands.forEach(cmd => {
+      kernel.commandBus.register(cmd.id, () => cmd.execute(commandContext));
+    });
+    return () => {
+      commands.forEach(cmd => kernel.commandBus.unregister(cmd.id));
+    };
+  }, [commands, commandContext, kernel]);
+
+  const runCommand = useCallback((id) => {
+    kernel.commandBus.execute(id);
+  }, [kernel]);
+
+  const shortcutMap = useMemo(() => buildShortcutMap(commands), [commands]);
 
   // --- Signature ---
   const handleSignatureSave = useCallback((dataUrl) => {
     setSignatureDataUrl(dataUrl);
     setShowSignaturePad(false);
     setActiveTool('signature');
-  }, []);
+  }, [setActiveTool]);
 
   const handleToolChange = useCallback((tool) => {
     if (tool === 'signature' && !signatureDataUrl) {
@@ -622,7 +820,7 @@ const runDD214Analysis = useCallback(async () => {
       return;
     }
     setActiveTool(tool);
-  }, [signatureDataUrl]);
+  }, [signatureDataUrl, setActiveTool]);
 
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
@@ -637,32 +835,29 @@ const runDD214Analysis = useCallback(async () => {
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, currentPage, updateFromResult]);
+  }, [pdfDoc, currentPage, updateFromResult, setActiveTool]);
 
   // --- Keyboard shortcuts ---
   useEffect(() => {
     const handler = (e) => {
-      const isMod = e.ctrlKey || e.metaKey;
       const inInput = !!e.target.closest('input,textarea,select');
+      if (!inInput) {
+        const key = eventToShortcut(e);
+        const cmdId = key ? shortcutMap.get(key) : null;
+        if (cmdId) {
+          e.preventDefault();
+          runCommand(cmdId);
+          return;
+        }
+      }
 
-      if (isMod && e.key === 'o') { e.preventDefault(); handleOpen(); }
-      else if (isMod && e.key === 's') { e.preventDefault(); handleSave(); }
-      else if (isMod && e.key === 'p') { e.preventDefault(); handlePrint(); }
-      else if (isMod && e.key === 'k') { e.preventDefault(); setShowCommandPalette(p => !p); }
-      else if (isMod && e.key === 'c' && !inInput) { e.preventDefault(); handleCopy(); }
-      else if (isMod && e.key === 'v' && !inInput) { e.preventDefault(); handlePaste(); }
-      else if (isMod && e.key === 'd' && !inInput) { e.preventDefault(); handleDuplicate(); }
-      else if (isMod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); annHistory.undo(); }
-      else if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); annHistory.redo(); }
-      else if (e.key === 'ArrowLeft' && !inInput && selectionIds.length === 0) {
+      if (e.key === 'ArrowLeft' && !inInput && selectionIds.length === 0) {
         setCurrentPage(p => Math.max(1, p - 1));
       }
       else if (e.key === 'ArrowRight' && !inInput && selectionIds.length === 0) {
         setCurrentPage(p => Math.min(numPages, p + 1));
       }
       else if (e.key === 'Delete' && !inInput && renderDoc) { handleDeletePage(); }
-      else if (e.key === '+' && isMod) { e.preventDefault(); setZoom(z => Math.min(3, z + 0.25)); }
-      else if (e.key === '-' && isMod) { e.preventDefault(); setZoom(z => Math.max(0.25, z - 0.25)); }
 
       if (!inInput && activeTool === 'select' && selectionIds.length > 0 &&
           ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
@@ -680,9 +875,8 @@ const runDD214Analysis = useCallback(async () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleOpen, handleSave, handlePrint, handleDeletePage, handleCopy, handlePaste,
-    handleDuplicate, annHistory, numPages, renderDoc, activeTool, selectionIds, selectedObjects,
-    handleBatchUpdateObjects]);
+  }, [renderDoc, activeTool, selectionIds, selectedObjects, numPages, handleDeletePage,
+    handleBatchUpdateObjects, runCommand, shortcutMap]);
 
   return (
     <>
@@ -696,31 +890,15 @@ const runDD214Analysis = useCallback(async () => {
       ) : (
     <div className="app">
       <Toolbar
-        onOpen={handleOpen}
-        onSave={handleSave}
-        onMerge={handleMerge}
-        onAddBlank={handleAddBlank}
-        onDeletePage={handleDeletePage}
-        onRotatePage={handleRotate}
+        runCommand={runCommand}
         activeTool={activeTool}
-        onToolChange={handleToolChange}
-        onExportWord={handleExportWord}
         zoom={zoom}
-        onZoomChange={setZoom}
         hasDoc={!!renderDoc}
         currentPage={currentPage}
         numPages={numPages}
-        onPageChange={setCurrentPage}
-        onUndo={annHistory.undo}
-        onRedo={annHistory.redo}
-        canUndo={annHistory.canUndo}
-        canRedo={annHistory.canRedo}
-        onPrint={handlePrint}
-        onWatermark={handleWatermark}
+        canUndo={canUndo}
+        canRedo={canRedo}
         watermarkText={watermarkText}
-        onSplit={handleSplit}
-        onImagesToPdf={handleImagesToPdf}
-        onZOrder={handleZOrder}
         canZOrder={selectionIds.length > 0}
       />
 
@@ -762,10 +940,13 @@ const runDD214Analysis = useCallback(async () => {
           currentPage={currentPage}
           zoom={zoom}
           activeTool={activeTool}
-          objects={annHistory.state}
+          objects={objects}
+          pageObjects={currentPageObjects}
           layers={layers}
           selectionIds={selectionIds}
-          onSelectionChange={setSelectionIds}
+          onSelectionChange={setSelection}
+          interactionState={interactionState}
+          setInteractionState={setInteractionState}
           onAddObject={handleAddObject}
           onDeleteObject={handleDeleteObject}
           onUpdateObject={handleUpdateObject}
@@ -777,6 +958,32 @@ const runDD214Analysis = useCallback(async () => {
           onDropFile={loadFile}
           watermarkText={watermarkText}
         />
+
+        <div className="sidebar-right">
+          <LayersPanel
+            objects={currentPageObjects}
+            selectionIds={selectionIds}
+            onSelectionChange={setSelection}
+            onToggleVisible={handleToggleVisible}
+            onToggleLocked={handleToggleLocked}
+            onReorder={handleLayerReorder}
+          />
+          <InspectorPanel
+            selectedObjects={selectedObjects}
+            onUpdateObject={handleUpdateObject}
+          />
+          <EvidencePanel
+            markers={evidenceIndex.markers}
+            exhibits={evidenceIndex.exhibits}
+            onJumpToPage={setCurrentPage}
+            onExportBundle={handleExportEvidenceBundle}
+          />
+          <CaseGraph
+            graph={caseGraph}
+            onNavigate={setCurrentPage}
+          />
+          <AvaPanel onAsk={handleAskAva} />
+        </div>
       </div>
 
       {showSignaturePad && (
@@ -789,7 +996,9 @@ const runDD214Analysis = useCallback(async () => {
       <CommandPalette
         isOpen={showCommandPalette}
         onClose={() => setShowCommandPalette(false)}
-        context={commandContext}
+        commands={commands}
+        onExecute={runCommand}
+        hasDoc={!!renderDoc}
       />
 
       {showProfileModal && (
@@ -798,6 +1007,29 @@ const runDD214Analysis = useCallback(async () => {
           onSave={handleProfileSave}
           onClose={() => setShowProfileModal(false)}
         />
+      )}
+
+      {showHealthModal && (
+        <div className="modal-backdrop" onClick={() => setShowHealthModal(false)}>
+          <div className="modal health-modal" onClick={e => e.stopPropagation()}>
+            <h3>Kernel Health Check</h3>
+            <p className="modal-hint">Services registered in the kernel.</p>
+            <div className="health-services">
+              {(healthReport?.services || []).map((service) => (
+                <div key={service} className="health-service-item">{service}</div>
+              ))}
+              {(healthReport?.services || []).length === 0 && (
+                <div className="health-service-item empty">No services reported.</div>
+              )}
+            </div>
+            <div className="health-timestamp">
+              Last check: {healthReport?.timestamp || 'unknown'}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={() => setShowHealthModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeWorkflow === 'evidence-builder' && (
@@ -842,6 +1074,8 @@ const runDD214Analysis = useCallback(async () => {
           <div className="loading-spinner" />
         </div>
       )}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <input
         ref={fileInputRef}

@@ -26,6 +26,10 @@ function base(type, page, pdfX, pdfY, width, height, extra = {}) {
     height,    // PDF points
     rotation: 0,
     zIndex: 0,
+    locked: false,
+    visible: true,
+    name: type,
+    opacity: 1,
     ...extra,
   };
 }
@@ -95,6 +99,10 @@ export function fromLegacyAnnotation(ann, pageHeight) {
         height: fontSize,
         rotation: 0,
         zIndex: 0,
+        locked: false,
+        visible: true,
+        name: 'text',
+        opacity: 1,
         text: ann.text,
         fontSize,
         alignment: 'left',
@@ -118,6 +126,10 @@ export function fromLegacyAnnotation(ann, pageHeight) {
         height: pdfH,
         rotation: 0,
         zIndex: 0,
+        locked: false,
+        visible: true,
+        name: ann.type,
+        opacity: 1,
       };
     }
     case 'signature': {
@@ -134,6 +146,10 @@ export function fromLegacyAnnotation(ann, pageHeight) {
         height: pdfH,
         rotation: 0,
         zIndex: 0,
+        locked: false,
+        visible: true,
+        name: 'signature',
+        opacity: 1,
         dataUrl: ann.dataUrl,
       };
     }
@@ -154,6 +170,10 @@ export function fromLegacyAnnotation(ann, pageHeight) {
         height: Math.max(...ys) - Math.min(...ys),
         rotation: 0,
         zIndex: 0,
+        locked: false,
+        visible: true,
+        name: 'drawing',
+        opacity: 1,
         pdfPoints,
         color: ann.color || '#000000',
         lineWidth: ann.lineWidth || 2,

@@ -20,8 +20,16 @@ export default function PageThumbnails({
             index={i}
             isActive={currentPage === i + 1}
             onSelect={() => onPageSelect(i + 1)}
-            onDragStart={() => setDragIndex(i)}
-            onDragOver={(e) => { e.preventDefault(); setDropIndex(i); }}
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', String(i));
+              setDragIndex(i);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setDropIndex(i);
+            }}
             onDrop={() => {
               if (dragIndex !== null && dragIndex !== i) {
                 onReorder(dragIndex, i);
