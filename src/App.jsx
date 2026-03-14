@@ -750,6 +750,14 @@ const runDD214Analysis = useCallback(async () => {
     handleBatchUpdateObjects(patches);
   }, [objects, selectionIds, handleBatchUpdateObjects]);
 
+  const handleToolChange = useCallback((tool) => {
+    if (tool === 'signature' && !signatureDataUrl) {
+      setShowSignaturePad(true);
+      return;
+    }
+    setActiveTool(tool);
+  }, [signatureDataUrl, setActiveTool]);
+
   const commandContext = useMemo(() => ({
     hasDoc: !!renderDoc,
     setActiveTool,
@@ -813,14 +821,6 @@ const runDD214Analysis = useCallback(async () => {
     setShowSignaturePad(false);
     setActiveTool('signature');
   }, [setActiveTool]);
-
-  const handleToolChange = useCallback((tool) => {
-    if (tool === 'signature' && !signatureDataUrl) {
-      setShowSignaturePad(true);
-      return;
-    }
-    setActiveTool(tool);
-  }, [signatureDataUrl, setActiveTool]);
 
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
