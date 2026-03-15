@@ -17,6 +17,7 @@ import Toolbar from './components/Toolbar';
 import PageThumbnails from './components/PageThumbnails';
 import DocumentNavigator from './components/DocumentNavigator';
 import PDFViewer from './components/PDFViewer';
+import MultiPageScroller from './components/MultiPageScroller';
 import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
 import ProfileModal from './components/ProfileModal';
@@ -117,6 +118,7 @@ function App() {
   const [renderDoc, setRenderDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const scrollerRef = useRef(null);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [healthReport, setHealthReport] = useState(null);
   const editorStore = useEditorStore([]);
@@ -936,10 +938,18 @@ const runDD214Analysis = useCallback(async () => {
       }
 
       if (e.key === 'ArrowLeft' && !inInput && selectionIds.length === 0) {
-        setCurrentPage(p => Math.max(1, p - 1));
+        setCurrentPage(p => {
+          const next = Math.max(1, p - 1);
+          scrollerRef.current?.scrollToPage(next);
+          return next;
+        });
       }
       else if (e.key === 'ArrowRight' && !inInput && selectionIds.length === 0) {
-        setCurrentPage(p => Math.min(numPages, p + 1));
+        setCurrentPage(p => {
+          const next = Math.min(numPages, p + 1);
+          scrollerRef.current?.scrollToPage(next);
+          return next;
+        });
       }
       else if (e.key === 'Delete' && !inInput && renderDoc) { handleDeletePage(); }
 
@@ -1027,14 +1037,20 @@ const runDD214Analysis = useCallback(async () => {
                   renderDoc={renderDoc}
                   numPages={numPages}
                   currentPage={currentPage}
-                  onPageSelect={setCurrentPage}
+                  onPageSelect={(n) => {
+                    setCurrentPage(n);
+                    scrollerRef.current?.scrollToPage(n);
+                  }}
                   onReorder={handleReorder}
                 />
                 <DocumentNavigator
                   renderDoc={renderDoc}
                   numPages={numPages}
                   currentPage={currentPage}
-                  onPageSelect={setCurrentPage}
+                  onPageSelect={(n) => {
+                    setCurrentPage(n);
+                    scrollerRef.current?.scrollToPage(n);
+                  }}
                 />
               </div>
             )}
@@ -1046,10 +1062,13 @@ const runDD214Analysis = useCallback(async () => {
               />
             )}
 
-            <PDFViewer
+            <MultiPageScroller
+              ref={scrollerRef}
               renderDoc={renderDoc}
+              numPages={numPages}
               currentPage={currentPage}
               zoom={zoom}
+              onCurrentPageChange={setCurrentPage}
               activeTool={activeTool}
               objects={objects}
               pageObjects={currentPageObjects}

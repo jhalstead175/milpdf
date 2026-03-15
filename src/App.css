@@ -551,6 +551,11 @@ html.editor-active #root {
   border-color: #313244;
 }
 
+.ava-status.local {
+  color: #89b4fa;
+  border-color: rgba(137, 180, 250, 0.4);
+}
+
 .ava-response {
   border: 1px solid #313244;
   border-radius: 8px;
@@ -867,6 +872,13 @@ html.editor-active #root {
   display: block;
 }
 
+.thumbnail-placeholder {
+  width: 100%;
+  aspect-ratio: 8.5 / 11;
+  background: #2a2a3d;
+  border-radius: 2px;
+}
+
 .page-number {
   position: absolute;
   bottom: 4px;
@@ -879,19 +891,48 @@ html.editor-active #root {
   font-weight: 500;
 }
 
+/* ===== Multi-page scroller ===== */
+.multi-page-scroller {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: #11111b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  gap: 0;
+}
+
+.page-section {
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+/* When PDFViewer is embedded inside a page-section, suppress its own scroll */
+.page-section .pdf-viewer {
+  flex: none;
+  overflow: visible;
+  background: none;
+  padding: 0;
+  gap: 0;
+}
+
 /* ===== PDF Viewer ===== */
 .pdf-viewer {
   flex: 1;
   overflow: auto;
   background: #11111b;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   padding: 24px;
+  gap: 16px;
 }
 
 .pdf-viewer.empty {
-  align-items: center;
+  justify-content: center;
 }
 
 .empty-message {
@@ -919,12 +960,10 @@ html.editor-active #root {
 
 .canvas-container {
   position: relative;
-  display: inline-block;
+  display: block;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   line-height: 0;
-  align-self: flex-start;
-  margin: 0 auto;
-  width: fit-content;
+  flex-shrink: 0;
 }
 
 .pdf-layer,
