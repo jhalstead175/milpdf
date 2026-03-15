@@ -33,7 +33,7 @@ import {
   addBlankPage, mergePdf, insertPdf, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
-import { embedEditorObjects } from './core/export';
+import { embedEditorObjects, secureEmbed } from './core/export';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -255,7 +255,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
+        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -281,7 +281,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
+        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -463,7 +463,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await embedEditorObjects(bytes, objects, layers, { flattenForm: true });
+        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -928,6 +928,12 @@ const runDD214Analysis = useCallback(async () => {
     const handler = (e) => {
       const inInput = !!e.target.closest('input,textarea,select');
       if (!inInput) {
+        // Ctrl+Shift+Z → redo (Mac/Linux convention alongside Ctrl+Y)
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          redo();
+          return;
+        }
         const key = eventToShortcut(e);
         const cmdId = key ? shortcutMap.get(key) : null;
         if (cmdId) {
@@ -970,7 +976,7 @@ const runDD214Analysis = useCallback(async () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [renderDoc, activeTool, selectionIds, selectedObjects, numPages, handleDeletePage,
-    handleBatchUpdateObjects, runCommand, shortcutMap]);
+    handleBatchUpdateObjects, runCommand, shortcutMap, redo]);
 
   return (
     <>
