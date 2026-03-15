@@ -87,13 +87,17 @@ export default function PDFViewer({
   }, [objects, onSelectionChange]);
 
   useEffect(() => {
+    // Capture the canvas element NOW — before any await — so it stays valid even
+    // if the component unmounts while getPage() is resolving (which happens often
+    // when IntersectionObserver rapidly changes currentPage).
+    const canvas = canvasRef.current;
     let cancelled = false;
-    if (renderDoc && canvasRef.current) {
+    if (renderDoc && canvas) {
       getPage(currentPage).then(entry => {
         if (!entry || cancelled) return;
-        const ctx = canvasRef.current.getContext('2d');
-        canvasRef.current.width = entry.width;
-        canvasRef.current.height = entry.height;
+        const ctx = canvas.getContext('2d');
+        canvas.width = entry.width;
+        canvas.height = entry.height;
         ctx.clearRect(0, 0, entry.width, entry.height);
         ctx.drawImage(entry.bitmap, 0, 0);
         setPageSize({ width: entry.width, height: entry.height });
@@ -123,6 +127,7 @@ export default function PDFViewer({
     if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
   }, [activeTool, setInteractionState]);
   const getCanvasPos = useCallback((e) => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
