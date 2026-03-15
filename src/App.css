@@ -1167,6 +1167,108 @@ html.editor-active #root {
   resize: both;
 }
 
+/* ===== Text Format Bar ===== */
+.text-format-bar-floating {
+  position: absolute;
+  z-index: 200;
+}
+
+.text-format-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+.tfb-select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  height: 26px;
+  cursor: pointer;
+}
+.tfb-select:focus { outline: none; border-color: #34d399; }
+
+.tfb-size {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  width: 46px;
+  height: 26px;
+  text-align: center;
+}
+.tfb-size:focus { outline: none; border-color: #34d399; }
+
+.tfb-btn {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  height: 26px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+.tfb-btn:hover { background: #334155; color: #e2e8f0; }
+.tfb-btn.active { background: #334155; color: #34d399; border-color: #34d399; }
+
+.tfb-div {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: #334155;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.tfb-color-wrap {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+.tfb-color {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tfb-color-wrap:hover .tfb-color { pointer-events: auto; }
+.tfb-color-dot {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #475569;
+  cursor: pointer;
+}
+.tfb-color-wrap:hover .tfb-color-dot { border-color: #34d399; }
+
+/* Make color input accessible via the dot */
+.tfb-color-wrap input[type="color"] {
+  position: absolute;
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
 /* ===== Crop Overlay ===== */
 .crop-overlay {
   position: absolute;
