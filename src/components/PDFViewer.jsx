@@ -13,15 +13,28 @@ import {
   distributeHorizontally, distributeVertically,
 } from '../editor/alignment';
 
-const FONT_FAMILIES = [
-  { label: 'Helvetica', value: 'Helvetica' },
-  { label: 'Times Roman', value: 'Times-Roman' },
-  { label: 'Courier', value: 'Courier' },
-  { label: 'Arial', value: 'Arial' },
-  { label: 'Georgia', value: 'Georgia' },
+const FALLBACK_FONTS = [
+  'Arial', 'Arial Black', 'Calibri', 'Cambria', 'Comic Sans MS',
+  'Courier New', 'Georgia', 'Helvetica', 'Impact', 'Lucida Console',
+  'Palatino', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana',
 ];
 
-function TextFormatBar({ fmt, onChange }) {
+function useFontList() {
+  const [fonts, setFonts] = useState(FALLBACK_FONTS);
+  useEffect(() => {
+    if ('queryLocalFonts' in window) {
+      window.queryLocalFonts()
+        .then(data => {
+          const names = [...new Set(data.map(f => f.family))].sort();
+          if (names.length > 0) setFonts(names);
+        })
+        .catch(() => {});
+    }
+  }, []);
+  return fonts;
+}
+
+function TextFormatBar({ fmt, onChange, fonts }) {
   return (
     <div
       className="text-format-bar"
@@ -33,7 +46,7 @@ function TextFormatBar({ fmt, onChange }) {
         value={fmt.fontFamily || 'Helvetica'}
         onChange={e => onChange({ fontFamily: e.target.value })}
       >
-        {FONT_FAMILIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        {fonts.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
       <input
         className="tfb-size"
@@ -99,10 +112,12 @@ export default function PDFViewer({
   onImagePlaced,
   onImagePlacementCancel,
 }) {
-  const canvasRef    = useRef(null);
-  const containerRef = useRef(null);
+  const canvasRef      = useRef(null);
+  const containerRef   = useRef(null);
+  const textAreaRef    = useRef(null);
+  const textEditorRef  = useRef(null);
 
-  const textAreaRef = useRef(null);
+  const fontList = useFontList();
   // Refs for gesture state — immune to stale-closure bugs between pointer events
   const cropStartRef  = useRef(null);
   const imageStartRef = useRef(null);
@@ -411,6 +426,22 @@ export default function PDFViewer({
     }
     setTextInput(null);
   }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject]);
+
+  // Only submit when focus leaves the entire text editor container (textarea + format bar).
+  const handleTextContainerBlur = useCallback((e) => {
+    const next = e.relatedTarget;
+    if (next && e.currentTarget.contains(next)) return; // focus stayed inside
+    if (!next) {
+      // Some browsers (Firefox) give null relatedTarget for native select dropdowns.
+      // Wait a tick to let focus settle before checking.
+      setTimeout(() => {
+        if (textEditorRef.current && textEditorRef.current.contains(document.activeElement)) return;
+        handleTextSubmit();
+      }, 150);
+      return;
+    }
+    handleTextSubmit();
+  }, [handleTextSubmit]);
 
   const handleEditSubmit = useCallback(() => {
     if (editInput) {
@@ -859,19 +890,27 @@ export default function PDFViewer({
           )}
 
           {textInput && (
-            <>
+            <div
+              ref={textEditorRef}
+              style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+              onBlur={handleTextContainerBlur}
+            >
               <div
                 className="text-format-bar-floating"
-                style={{ left: textInput.x, top: textInput.y - 42 }}
+                style={{ left: textInput.x, top: textInput.y - 42, pointerEvents: 'auto' }}
               >
                 <TextFormatBar
                   fmt={textInput}
-                  onChange={patch => setTextInput(prev => ({ ...prev, ...patch }))}
+                  fonts={fontList}
+                  onChange={patch => {
+                    setTextInput(prev => ({ ...prev, ...patch }));
+                    setTimeout(() => textAreaRef.current?.focus(), 0);
+                  }}
                 />
               </div>
               <div
                 className="text-input-overlay"
-                style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
+                style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height, pointerEvents: 'auto' }}
               >
                 <textarea
                   ref={textAreaRef}
@@ -883,7 +922,6 @@ export default function PDFViewer({
                     if (e.key === 'Escape') setTextInput(null);
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
                   }}
-                  onBlur={handleTextSubmit}
                   placeholder="Type text..."
                   style={{
                     width: '100%', height: '100%', resize: 'both',
@@ -896,7 +934,7 @@ export default function PDFViewer({
                   }}
                 />
               </div>
-            </>
+            </div>
           )}
 
           {activeTool === 'crop' && cropRect && (
@@ -965,6 +1003,7 @@ export default function PDFViewer({
             >
               <TextFormatBar
                 fmt={selectedObjects[0]}
+                fonts={fontList}
                 onChange={patch => onUpdateObject(selectedObjects[0].id, patch)}
               />
             </div>
