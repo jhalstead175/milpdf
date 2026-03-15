@@ -3,7 +3,6 @@ export function createImageTool(ctx) {
     imagePlacement,
     imageStartRef,
     setImageRect,
-    imageRect,
     screenRectToPdf,
     onAddObject,
     createBaseObject,
@@ -51,13 +50,29 @@ export function createImageTool(ctx) {
 
     onMouseUp(_e, pos) {
       if (!imagePlacement) return;
-      let rect = imageRect;
-      if (!rect || rect.width < 5 || rect.height < 5) {
-        rect = buildDefaultRect(pos || imageStartRef.current || { x: 100, y: 100 });
-      }
+      const start = imageStartRef.current;
       imageStartRef.current = null;
       setImageRect(null);
+
+      // Compute rect directly from refs/args — never reads stale imageRect state
+      let rect;
+      if (start && pos) {
+        const w = Math.abs(pos.x - start.x);
+        const h = Math.abs(pos.y - start.y);
+        if (w >= 5 && h >= 5) {
+          rect = {
+            x: Math.min(start.x, pos.x),
+            y: Math.min(start.y, pos.y),
+            width: w,
+            height: h,
+          };
+        }
+      }
+      if (!rect) {
+        rect = buildDefaultRect(pos || start || { x: 100, y: 100 });
+      }
       if (!rect) return;
+
       const pdfRect = screenRectToPdf(rect.x, rect.y, rect.width, rect.height);
       onAddObject(createBaseObject('image', pdfRect, 'markup', {
         dataUrl: imagePlacement.dataUrl,

@@ -872,6 +872,13 @@ html.editor-active #root {
   display: block;
 }
 
+.thumbnail-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+}
+
 .thumbnail-placeholder {
   width: 100%;
   aspect-ratio: 8.5 / 11;
@@ -894,28 +901,32 @@ html.editor-active #root {
 /* ===== Multi-page scroller ===== */
 .multi-page-scroller {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow: auto;
   background: #11111b;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 24px;
-  gap: 0;
+  align-items: stretch; /* page-sections fill full width */
 }
 
+/* Each page occupies its own centered row */
 .page-section {
-  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  padding: 24px 24px 0;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-/* When PDFViewer is embedded inside a page-section, suppress its own scroll */
+.page-section:last-child {
+  padding-bottom: 24px;
+}
+
+/* Ghost the pdf-viewer wrapper so .canvas-container centers directly
+   inside .page-section without a double flex-column layer */
 .page-section .pdf-viewer {
-  flex: none;
-  overflow: visible;
-  background: none;
-  padding: 0;
-  gap: 0;
+  display: contents;
 }
 
 /* ===== PDF Viewer ===== */
