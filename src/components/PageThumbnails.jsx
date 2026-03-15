@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { renderPageToCanvas } from '../utils/pdfUtils';
 
 export default function PageThumbnails({
@@ -53,15 +53,21 @@ function ThumbnailItem({
   renderDoc, index, isActive, onSelect,
   onDragStart, onDragOver, onDrop, onDragEnd, isDragOver,
 }) {
-  const canvasRef = useRef(null);
-  const [rendered, setRendered] = useState(false);
+  const [imgSrc, setImgSrc] = useState(null);
 
   useEffect(() => {
-    if (!canvasRef.current || !renderDoc) return;
+    if (!renderDoc) return;
     let cancelled = false;
-    renderPageToCanvas(renderDoc, index + 1, canvasRef.current, 0.25)
-      .then(() => { if (!cancelled) setRendered(true); })
+
+    // Render to an offscreen canvas, then snapshot to a data URL.
+    // This avoids all CSS conflicts with in-DOM canvas elements.
+    const offscreen = document.createElement('canvas');
+    renderPageToCanvas(renderDoc, index + 1, offscreen, 0.25)
+      .then(() => {
+        if (!cancelled) setImgSrc(offscreen.toDataURL());
+      })
       .catch(() => {});
+
     return () => { cancelled = true; };
   }, [renderDoc, index]);
 
@@ -75,8 +81,10 @@ function ThumbnailItem({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      {!rendered && <div className="thumbnail-placeholder" />}
-      <canvas ref={canvasRef} style={{ display: rendered ? 'block' : 'none' }} />
+      {imgSrc
+        ? <img src={imgSrc} alt={`Page ${index + 1}`} className="thumbnail-img" />
+        : <div className="thumbnail-placeholder" />
+      }
       <span className="page-number">{index + 1}</span>
     </div>
   );
