@@ -54,24 +54,16 @@ function ThumbnailItem({
   onDragStart, onDragOver, onDrop, onDragEnd, isDragOver,
 }) {
   const canvasRef = useRef(null);
-  const observerRef = useRef(null);
   const [rendered, setRendered] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current || !renderDoc) return;
-    if (rendered) return;
-
-    observerRef.current = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && !rendered) {
-        renderPageToCanvas(renderDoc, index + 1, canvasRef.current, 0.2).catch(() => {});
-        setRendered(true);
-        observerRef.current?.disconnect();
-      }
-    }, { rootMargin: '200px' });
-
-    observerRef.current.observe(canvasRef.current);
-    return () => observerRef.current?.disconnect();
-  }, [renderDoc, index, rendered]);
+    let cancelled = false;
+    renderPageToCanvas(renderDoc, index + 1, canvasRef.current, 0.25)
+      .then(() => { if (!cancelled) setRendered(true); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [renderDoc, index]);
 
   return (
     <div
@@ -83,7 +75,8 @@ function ThumbnailItem({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      <canvas ref={canvasRef} />
+      {!rendered && <div className="thumbnail-placeholder" />}
+      <canvas ref={canvasRef} style={{ display: rendered ? 'block' : 'none' }} />
       <span className="page-number">{index + 1}</span>
     </div>
   );

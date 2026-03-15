@@ -1,9 +1,8 @@
 export function createImageTool(ctx) {
   const {
     imagePlacement,
-    setImageStart,
+    imageStartRef,
     setImageRect,
-    imageStart,
     imageRect,
     screenRectToPdf,
     onAddObject,
@@ -35,17 +34,18 @@ export function createImageTool(ctx) {
   return {
     onMouseDown(_e, pos) {
       if (!imagePlacement) return;
-      setImageStart({ x: pos.x, y: pos.y });
+      imageStartRef.current = pos;
       setImageRect({ x: pos.x, y: pos.y, width: 1, height: 1 });
     },
 
     onMouseMove(_e, pos) {
-      if (!imageStart) return;
+      const start = imageStartRef.current;
+      if (!start) return;
       setImageRect({
-        x: Math.min(imageStart.x, pos.x),
-        y: Math.min(imageStart.y, pos.y),
-        width: Math.abs(pos.x - imageStart.x),
-        height: Math.abs(pos.y - imageStart.y),
+        x: Math.min(start.x, pos.x),
+        y: Math.min(start.y, pos.y),
+        width: Math.abs(pos.x - start.x),
+        height: Math.abs(pos.y - start.y),
       });
     },
 
@@ -53,8 +53,10 @@ export function createImageTool(ctx) {
       if (!imagePlacement) return;
       let rect = imageRect;
       if (!rect || rect.width < 5 || rect.height < 5) {
-        rect = buildDefaultRect(pos);
+        rect = buildDefaultRect(pos || imageStartRef.current || { x: 100, y: 100 });
       }
+      imageStartRef.current = null;
+      setImageRect(null);
       if (!rect) return;
       const pdfRect = screenRectToPdf(rect.x, rect.y, rect.width, rect.height);
       onAddObject(createBaseObject('image', pdfRect, 'markup', {
@@ -62,14 +64,12 @@ export function createImageTool(ctx) {
         name: imagePlacement.name || 'image',
         opacity: 1,
       }));
-      setImageRect(null);
-      setImageStart(null);
       onImagePlaced?.();
     },
 
     onCancel() {
+      imageStartRef.current = null;
       setImageRect(null);
-      setImageStart(null);
       onImagePlacementCancel?.();
     },
   };

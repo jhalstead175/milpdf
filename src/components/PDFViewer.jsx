@@ -41,6 +41,9 @@ export default function PDFViewer({
   const containerRef = useRef(null);
 
   const textAreaRef = useRef(null);
+  // Refs for gesture state — immune to stale-closure bugs between pointer events
+  const cropStartRef  = useRef(null);
+  const imageStartRef = useRef(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const { getPage } = usePageCache(renderDoc, zoom);
 
@@ -48,14 +51,12 @@ export default function PDFViewer({
   const [textBoxStart, setTextBoxStart] = useState(null);
   const [textInput, setTextInput] = useState(null);
   const [cropRect, setCropRect] = useState(null);
-  const [cropStart, setCropStart] = useState(null);
   const [highlightRect, setHighlightRect] = useState(null);
   const [highlightStart, setHighlightStart] = useState(null);
   const [redactRect, setRedactRect] = useState(null);
   const [redactStart, setRedactStart] = useState(null);
   const [drawingPoints, setDrawingPoints] = useState(null);
   const [imageRect, setImageRect] = useState(null);
-  const [imageStart, setImageStart] = useState(null);
   const [selection, setSelection] = useState(() => new Set(selectionIds));
   const [snapGuides, setSnapGuides] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -112,11 +113,11 @@ export default function PDFViewer({
   }, [renderDoc, currentPage]);
 
   useEffect(() => {
-    if (activeTool !== 'crop') { setCropRect(null); setCropStart(null); }
+    if (activeTool !== 'crop') { setCropRect(null); cropStartRef.current = null; }
     if (activeTool !== 'highlight') { setHighlightRect(null); setHighlightStart(null); }
     if (activeTool !== 'redact') { setRedactRect(null); setRedactStart(null); }
     if (activeTool !== 'draw') { setDrawingPoints(null); }
-    if (activeTool !== 'image') { setImageRect(null); setImageStart(null); }
+    if (activeTool !== 'image') { setImageRect(null); imageStartRef.current = null; }
     if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
     if (activeTool !== 'text') { setTextBoxRect(null); setTextBoxStart(null); setTextInput(null); }
     if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
@@ -258,12 +259,12 @@ export default function PDFViewer({
     findObjectAt,
     setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
     setTextInput,
-    setCropStart, setCropRect, cropStart,
+    cropStartRef, setCropRect,
     setHighlightStart, setHighlightRect, highlightStart, highlightRect,
     setRedactStart, setRedactRect, redactStart, redactRect,
     setDrawingPoints, drawingPoints, screenToPdfPoint,
     imagePlacement,
-    setImageRect, setImageStart, imageRect, imageStart,
+    imageStartRef, setImageRect, imageRect,
     onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
@@ -276,12 +277,12 @@ export default function PDFViewer({
     findObjectAt,
     setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
     setTextInput,
-    setCropStart, setCropRect, cropStart,
+    cropStartRef, setCropRect,
     setHighlightStart, setHighlightRect, highlightStart, highlightRect,
     setRedactStart, setRedactRect, redactStart, redactRect,
     setDrawingPoints, drawingPoints, screenToPdfPoint,
     imagePlacement,
-    setImageRect, setImageStart, imageRect, imageStart,
+    imageStartRef, setImageRect, imageRect,
     onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
@@ -385,9 +386,12 @@ export default function PDFViewer({
   }, [getCanvasPos, toolRegistry, activeTool]);
   const handlePointerUp = useCallback((e) => {
     const tool = toolRegistry[activeTool];
-    if (tool?.onMouseUp) tool.onMouseUp(e);
+    if (tool?.onMouseUp) {
+      const pos = canvasRef.current ? getCanvasPos(e) : { x: 0, y: 0 };
+      tool.onMouseUp(e, pos);
+    }
     e.currentTarget.releasePointerCapture?.(e.pointerId);
-  }, [toolRegistry, activeTool]);
+  }, [toolRegistry, activeTool, getCanvasPos]);
   const handlePointerCancel = useCallback((e) => {
     const tool = toolRegistry[activeTool];
     if (tool?.onCancel) tool.onCancel(e);
