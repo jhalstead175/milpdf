@@ -977,7 +977,16 @@ html.editor-active #root {
   flex-shrink: 0;
 }
 
-.pdf-layer,
+/* pdf-layer is in-flow so the canvas inside it gives .canvas-container its height.
+   Without this, all children of .canvas-container are position:absolute and the
+   container collapses to 0px — causing every page-section to be 0px tall and all
+   pages to overlap (the "ghost document" bug). */
+.pdf-layer {
+  display: block;
+  line-height: 0;
+}
+
+/* Overlay layers sit on top of the canvas using absolute positioning */
 .annotation-layer,
 .selection-layer,
 .overlay-layer {

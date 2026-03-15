@@ -59,16 +59,28 @@ function ThumbnailItem({
     if (!renderDoc) return;
     let cancelled = false;
 
-    // Render to an offscreen canvas, then snapshot to a data URL.
-    // This avoids all CSS conflicts with in-DOM canvas elements.
     const offscreen = document.createElement('canvas');
-    renderPageToCanvas(renderDoc, index + 1, offscreen, 0.25)
-      .then(() => {
-        if (!cancelled) setImgSrc(offscreen.toDataURL());
-      })
-      .catch(() => {});
 
-    return () => { cancelled = true; };
+    const tryRender = (delay) => {
+      const timer = setTimeout(() => {
+        if (cancelled) return;
+        renderPageToCanvas(renderDoc, index + 1, offscreen, 0.25)
+          .then(() => {
+            if (!cancelled) setImgSrc(offscreen.toDataURL());
+          })
+          .catch(() => {
+            // PDF.js serialises renders per-page: if the main viewer is rendering
+            // the same page concurrently, we lose the race. Retry once after 1 s.
+            if (!cancelled) tryRender(1000);
+          });
+      }, delay);
+      return timer;
+    };
+
+    // Small initial delay so the main viewer's first render wins the PDF.js lock
+    // on page 1 (and whichever page is current). Stagger by index to spread load.
+    const t = tryRender(200 + index * 40);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [renderDoc, index]);
 
   return (
