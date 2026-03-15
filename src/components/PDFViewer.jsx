@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { FileSearch } from 'lucide-react';
 import usePageCache from '../hooks/usePageCache';
+import { useContentBlocks } from '../hooks/useContentBlocks';
 import { makeId } from '../utils/id';
 import { identityTransform, transformToCSS, transformedBounds } from '../editor/Transform';
 import { createToolRegistry } from '../core/tools';
@@ -117,7 +118,8 @@ export default function PDFViewer({
   const textAreaRef    = useRef(null);
   const textEditorRef  = useRef(null);
 
-  const fontList = useFontList();
+  const fontList     = useFontList();
+  const contentBlocks = useContentBlocks(renderDoc, currentPage, zoom, activeTool === 'edit');
   // Refs for gesture state — immune to stale-closure bugs between pointer events
   const cropStartRef  = useRef(null);
   const imageStartRef = useRef(null);
@@ -457,7 +459,7 @@ export default function PDFViewer({
         );
         onAddObject(createBaseObject('text', textRect, 'markup', {
           text: editInput.text,
-          fontSize: Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
+          fontSize: editInput.fontSize || Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
           fontFamily: 'Helvetica',
           fontWeight: 'normal',
           fontStyle: 'normal',
@@ -851,6 +853,22 @@ export default function PDFViewer({
             />
           )}
 
+          {activeTool === 'edit' && !editInput && contentBlocks.map((block, i) => (
+            <div
+              key={i}
+              className="content-block-handle"
+              style={{ left: block.x, top: block.y, width: block.width, height: block.height }}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => {
+                e.stopPropagation();
+                setEditInput({ x: block.x, y: block.y, width: block.width, height: block.height, text: block.text, fontSize: block.fontSize });
+              }}
+              title="Click to edit"
+            >
+              <span className="content-block-label">T</span>
+            </div>
+          ))}
+
           {activeTool === 'edit' && editRect && (
             <div
               className="edit-overlay"
@@ -872,19 +890,24 @@ export default function PDFViewer({
                 width: editInput.width,
                 height: editInput.height,
               }}
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget)) handleEditSubmit();
+              }}
             >
-              <input
-                type="text"
+              <textarea
                 autoFocus
                 value={editInput.text}
+                onMouseDown={e => e.stopPropagation()}
                 onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleEditSubmit();
                   if (e.key === 'Escape') setEditInput(null);
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleEditSubmit();
                 }}
-                onBlur={handleEditSubmit}
-                placeholder="Replacement text (optional)..."
-                style={{ width: '100%', height: '100%' }}
+                placeholder="Replace with… (leave empty to just erase)"
+                style={{
+                  width: '100%', height: '100%', resize: 'none',
+                  fontSize: editInput.fontSize ? `${editInput.fontSize * zoom}px` : undefined,
+                }}
               />
             </div>
           )}

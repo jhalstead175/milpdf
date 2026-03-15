@@ -1638,7 +1638,8 @@ html.editor-active #root {
   position: absolute;
 }
 
-.edit-input-overlay input {
+.edit-input-overlay input,
+.edit-input-overlay textarea {
   border: 2px solid #34d399;
   border-radius: 0;
   padding: 2px 4px;
@@ -1647,6 +1648,39 @@ html.editor-active #root {
   color: #000;
   outline: none;
   box-sizing: border-box;
+}
+
+/* ===== Content Block Handles (Edit mode) ===== */
+.content-block-handle {
+  position: absolute;
+  border: 1px dashed rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.04);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.content-block-handle:hover {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.9);
+  border-style: solid;
+}
+
+.content-block-label {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(52, 211, 153, 0.7);
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.content-block-handle:hover .content-block-label {
+  opacity: 1;
 }
 
 .pdf-canvas.tool-edit {
