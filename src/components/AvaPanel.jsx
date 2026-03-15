@@ -1,24 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 export default function AvaPanel({ onAsk }) {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('checking');
-
-  useEffect(() => {
-    let active = true;
-    fetch('/api/ava', { method: 'GET' })
-      .then((res) => {
-        if (!active) return;
-        setStatus(res.ok ? 'connected' : 'offline');
-      })
-      .catch(() => {
-        if (!active) return;
-        setStatus('offline');
-      });
-    return () => { active = false; };
-  }, []);
+  const [status] = useState('local');
 
   const handleAsk = async () => {
     if (!question.trim()) return;

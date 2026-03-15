@@ -1,15 +1,15 @@
 export function createCropTool(ctx) {
-  const { setCropStart, setCropRect, interactionState, setInteractionState } = ctx;
+  const { setCropRect, cropStartRef, setInteractionState } = ctx;
 
   return {
     onMouseDown(_e, pos) {
-      setCropStart({ x: pos.x, y: pos.y });
+      cropStartRef.current = pos;
       setInteractionState(prev => ({ ...prev, cropStart: pos }));
       setCropRect({ x: pos.x, y: pos.y, width: 1, height: 1 });
     },
 
     onMouseMove(_e, pos) {
-      const start = interactionState.cropStart;
+      const start = cropStartRef.current;
       if (!start) return;
       setCropRect({
         x: Math.min(start.x, pos.x),
@@ -20,13 +20,14 @@ export function createCropTool(ctx) {
     },
 
     onMouseUp() {
+      cropStartRef.current = null;
       setInteractionState(prev => ({ ...prev, cropStart: null }));
       // Crop is applied via the overlay action buttons.
     },
     onCancel() {
+      cropStartRef.current = null;
       setInteractionState(prev => ({ ...prev, cropStart: null }));
       setCropRect(null);
-      setCropStart(null);
     },
   };
 }
