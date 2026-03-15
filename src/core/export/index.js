@@ -1,1 +1,1 @@
-export { embedEditorObjects } from '../../utils/pdfUtils';
+export { embedEditorObjects, secureEmbed } from '../../utils/pdfUtils';

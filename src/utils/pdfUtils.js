@@ -6,6 +6,8 @@ import { transformToPdfLib } from '../editor/Transform';
 // Set up PDF.js worker from CDN
 GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
 
+const REDACT_TYPES = new Set(['redact', 'whiteout']);
+
 export async function getRenderDoc(bytes) {
   const loadingTask = getDocument({
     data: bytes.slice(0),
@@ -323,6 +325,74 @@ export async function cropPage(pdfDoc, pageIndex, cropBox) {
   const pdfY = pageHeight - y - h;
   page.setCropBox(pdfX, pdfY, w, h);
   return refreshRender(pdfDoc);
+}
+
+/**
+ * Like embedEditorObjects, but pages that contain 'redact' or 'whiteout' objects
+ * are rasterized to a flat image so the underlying text/image content is
+ * permanently removed from the PDF structure — not merely painted over.
+ *
+ * @param {Uint8Array} currentBytes  Original PDF bytes
+ * @param {object[]}   objects       Editor objects
+ * @param {object}     layers        Layer visibility map
+ * @param {object}     renderDoc     PDF.js document (used to render pages)
+ * @param {object}     [options]     Forwarded to embedEditorObjects
+ */
+export async function secureEmbed(currentBytes, objects, layers, renderDoc, options = {}) {
+  // Which page numbers have secure objects?
+  const securePageNumbers = new Set(
+    objects.filter(o => REDACT_TYPES.has(o.type)).map(o => o.page)
+  );
+
+  // Step 1 — embed ALL annotations normally (correct z-order, replacement text on top)
+  const annotatedBytes = await embedEditorObjects(currentBytes, objects, layers, options);
+
+  if (securePageNumbers.size === 0) return annotatedBytes;
+
+  // Step 2 — load the annotated PDF and a render-doc so PDF.js shows the final visual
+  const pdfDoc         = await PDFDocument.load(annotatedBytes);
+  const annotRenderDoc = await getRenderDoc(annotatedBytes);
+  const srcPages       = pdfDoc.getPages();
+
+  // Build a new PDF: secure pages → rasterized image, others → copy as-is
+  const outDoc = await PDFDocument.create();
+
+  for (let i = 0; i < srcPages.length; i++) {
+    const pageNum   = i + 1;
+    const srcPage   = srcPages[i];
+    const { width, height } = srcPage.getSize();
+
+    if (!securePageNumbers.has(pageNum)) {
+      // Non-redacted page: copy verbatim (text searchable, annotations intact)
+      const [copied] = await outDoc.copyPages(pdfDoc, [i]);
+      outDoc.addPage(copied);
+      continue;
+    }
+
+    // Redacted page: render to canvas at 2× for print quality
+    const SCALE    = 2;
+    const pdfPage  = await annotRenderDoc.getPage(pageNum);
+    const viewport = pdfPage.getViewport({ scale: SCALE });
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+
+    // Convert canvas → PNG → embed in output doc
+    const blob     = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const imgBytes = new Uint8Array(await blob.arrayBuffer());
+    const pngImage = await outDoc.embedPng(imgBytes);
+
+    // Fresh blank page — NO original content streams survive
+    const newPage = outDoc.addPage([width, height]);
+    newPage.drawImage(pngImage, { x: 0, y: 0, width, height });
+  }
+
+  return new Uint8Array(await outDoc.save());
 }
 
 export async function saveWithDialog(bytes, filename) {

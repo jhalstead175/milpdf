@@ -995,6 +995,7 @@ html.editor-active #root {
   left: 0;
   width: 100%;
   height: 100%;
+  touch-action: none; /* prevent browser scroll/zoom interfering with pointer events */
 }
 
 .pdf-canvas {
