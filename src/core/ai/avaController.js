@@ -61,6 +61,12 @@ export async function askAva(question, context) {
   }
 
   const lower = question.toLowerCase();
+  if (/^\s*(hi|hello|hey|howdy|greetings|good\s+(morning|afternoon|evening))\b/.test(lower)) {
+    return {
+      answer: "Hi! I'm Ava, your document assistant. I can help you:\n• Build a timeline of key dates\n• Detect potential contradictions\n• Generate deposition questions\n• Draft a motion\n\nJust ask me anything about your document.",
+      data: {},
+    };
+  }
   if (lower.includes('timeline')) {
     const result = buildTimeline(context);
     return {
