@@ -13,6 +13,68 @@ import {
   distributeHorizontally, distributeVertically,
 } from '../editor/alignment';
 
+const FONT_FAMILIES = [
+  { label: 'Helvetica', value: 'Helvetica' },
+  { label: 'Times Roman', value: 'Times-Roman' },
+  { label: 'Courier', value: 'Courier' },
+  { label: 'Arial', value: 'Arial' },
+  { label: 'Georgia', value: 'Georgia' },
+];
+
+function TextFormatBar({ fmt, onChange }) {
+  return (
+    <div
+      className="text-format-bar"
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+    >
+      <select
+        className="tfb-select"
+        value={fmt.fontFamily || 'Helvetica'}
+        onChange={e => onChange({ fontFamily: e.target.value })}
+      >
+        {FONT_FAMILIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+      </select>
+      <input
+        className="tfb-size"
+        type="number"
+        min="6"
+        max="144"
+        value={fmt.fontSize || 16}
+        onMouseDown={e => e.stopPropagation()}
+        onChange={e => { const v = parseInt(e.target.value, 10); if (v >= 6 && v <= 144) onChange({ fontSize: v }); }}
+      />
+      <button
+        className={`tfb-btn${fmt.fontWeight === 'bold' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ fontWeight: fmt.fontWeight === 'bold' ? 'normal' : 'bold' }); }}
+        title="Bold"
+      ><strong>B</strong></button>
+      <button
+        className={`tfb-btn${fmt.fontStyle === 'italic' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ fontStyle: fmt.fontStyle === 'italic' ? 'normal' : 'italic' }); }}
+        title="Italic"
+      ><em>I</em></button>
+      <span className="tfb-div" />
+      <button className={`tfb-btn${(fmt.alignment || 'left') === 'left' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'left' }); }} title="Align Left">&#8943;L</button>
+      <button className={`tfb-btn${fmt.alignment === 'center' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'center' }); }} title="Align Center">&#8943;C</button>
+      <button className={`tfb-btn${fmt.alignment === 'right' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'right' }); }} title="Align Right">&#8943;R</button>
+      <span className="tfb-div" />
+      <label className="tfb-color-wrap" title="Text color" onMouseDown={e => e.stopPropagation()}>
+        <input
+          type="color"
+          className="tfb-color"
+          value={fmt.color || '#000000'}
+          onChange={e => onChange({ color: e.target.value })}
+        />
+        <span className="tfb-color-dot" style={{ background: fmt.color || '#000000' }} />
+      </label>
+    </div>
+  );
+}
+
 /**
  * PDFViewer — MilPDF 2.0
  *
@@ -326,16 +388,22 @@ export default function PDFViewer({
           text: textInput.text,
           width: rect.width,
           height: rect.height,
+          fontSize: textInput.fontSize || 16,
+          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontWeight: textInput.fontWeight || 'normal',
+          fontStyle: textInput.fontStyle || 'normal',
+          color: textInput.color || '#000000',
+          alignment: textInput.alignment || 'left',
         });
       } else {
         onAddObject(createBaseObject('text', rect, 'markup', {
           text: textInput.text,
           fontSize: textInput.fontSize || 16,
-          fontFamily: 'Helvetica',
-          fontWeight: 'normal',
-          fontStyle: 'normal',
-          color: '#000000',
-          alignment: 'left',
+          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontWeight: textInput.fontWeight || 'normal',
+          fontStyle: textInput.fontStyle || 'normal',
+          color: textInput.color || '#000000',
+          alignment: textInput.alignment || 'left',
           lineHeight: 1.2,
           autoHeight: false,
         }));
@@ -640,6 +708,11 @@ export default function PDFViewer({
                   height: rect.height,
                   text: obj.text || '',
                   fontSize: obj.fontSize || 16,
+                  fontFamily: obj.fontFamily || 'Helvetica',
+                  fontWeight: obj.fontWeight || 'normal',
+                  fontStyle: obj.fontStyle || 'normal',
+                  color: obj.color || '#000000',
+                  alignment: obj.alignment || 'left',
                   existingId: obj.id,
                 });
               }}
@@ -786,25 +859,44 @@ export default function PDFViewer({
           )}
 
           {textInput && (
-            <div
-              className="text-input-overlay"
-              style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
-            >
-              <textarea
-                ref={textAreaRef}
-                autoFocus
-                value={textInput.text}
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setTextInput(null);
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
-                }}
-                onBlur={handleTextSubmit}
-                placeholder="Type text..."
-                style={{ width: '100%', height: '100%', resize: 'both' }}
-              />
-            </div>
+            <>
+              <div
+                className="text-format-bar-floating"
+                style={{ left: textInput.x, top: textInput.y - 42 }}
+              >
+                <TextFormatBar
+                  fmt={textInput}
+                  onChange={patch => setTextInput(prev => ({ ...prev, ...patch }))}
+                />
+              </div>
+              <div
+                className="text-input-overlay"
+                style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
+              >
+                <textarea
+                  ref={textAreaRef}
+                  autoFocus
+                  value={textInput.text}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setTextInput(null);
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
+                  }}
+                  onBlur={handleTextSubmit}
+                  placeholder="Type text..."
+                  style={{
+                    width: '100%', height: '100%', resize: 'both',
+                    fontSize: `${(textInput.fontSize || 16) * zoom}px`,
+                    fontFamily: textInput.fontFamily || 'Helvetica',
+                    fontWeight: textInput.fontWeight || 'normal',
+                    fontStyle: textInput.fontStyle || 'normal',
+                    color: textInput.color || '#000000',
+                    textAlign: textInput.alignment || 'left',
+                  }}
+                />
+              </div>
+            </>
           )}
 
           {activeTool === 'crop' && cropRect && (
@@ -865,6 +957,19 @@ export default function PDFViewer({
         </div>
 
         <div className={RENDER_LAYERS.selection}>
+          {selectionScreen && selectedObjects.length === 1 && selectedObjects[0].type === 'text' && !textInput && (
+            <div
+              className="text-format-bar-floating"
+              style={{ left: selectionScreen.left, top: selectionScreen.top - 42 }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <TextFormatBar
+                fmt={selectedObjects[0]}
+                onChange={patch => onUpdateObject(selectedObjects[0].id, patch)}
+              />
+            </div>
+          )}
+
           {selectionScreen && selectedObjects.length > 1 && (
             <div
               className="align-toolbar"
