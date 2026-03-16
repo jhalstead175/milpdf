@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { FileSearch } from 'lucide-react';
 import usePageCache from '../hooks/usePageCache';
+import { useContentBlocks } from '../hooks/useContentBlocks';
 import { makeId } from '../utils/id';
 import { identityTransform, transformToCSS, transformedBounds } from '../editor/Transform';
 import { createToolRegistry } from '../core/tools';
@@ -12,6 +13,81 @@ import {
   alignCenterH, alignCenterV,
   distributeHorizontally, distributeVertically,
 } from '../editor/alignment';
+
+const FALLBACK_FONTS = [
+  'Arial', 'Arial Black', 'Calibri', 'Cambria', 'Comic Sans MS',
+  'Courier New', 'Georgia', 'Helvetica', 'Impact', 'Lucida Console',
+  'Palatino', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana',
+];
+
+function useFontList() {
+  const [fonts, setFonts] = useState(FALLBACK_FONTS);
+  useEffect(() => {
+    if ('queryLocalFonts' in window) {
+      window.queryLocalFonts()
+        .then(data => {
+          const names = [...new Set(data.map(f => f.family))].sort();
+          if (names.length > 0) setFonts(names);
+        })
+        .catch(() => {});
+    }
+  }, []);
+  return fonts;
+}
+
+function TextFormatBar({ fmt, onChange, fonts }) {
+  return (
+    <div
+      className="text-format-bar"
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+    >
+      <select
+        className="tfb-select"
+        value={fmt.fontFamily || 'Helvetica'}
+        onChange={e => onChange({ fontFamily: e.target.value })}
+      >
+        {fonts.map(f => <option key={f} value={f}>{f}</option>)}
+      </select>
+      <input
+        className="tfb-size"
+        type="number"
+        min="6"
+        max="144"
+        value={fmt.fontSize || 16}
+        onMouseDown={e => e.stopPropagation()}
+        onChange={e => { const v = parseInt(e.target.value, 10); if (v >= 6 && v <= 144) onChange({ fontSize: v }); }}
+      />
+      <button
+        className={`tfb-btn${fmt.fontWeight === 'bold' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ fontWeight: fmt.fontWeight === 'bold' ? 'normal' : 'bold' }); }}
+        title="Bold"
+      ><strong>B</strong></button>
+      <button
+        className={`tfb-btn${fmt.fontStyle === 'italic' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ fontStyle: fmt.fontStyle === 'italic' ? 'normal' : 'italic' }); }}
+        title="Italic"
+      ><em>I</em></button>
+      <span className="tfb-div" />
+      <button className={`tfb-btn${(fmt.alignment || 'left') === 'left' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'left' }); }} title="Align Left">&#8943;L</button>
+      <button className={`tfb-btn${fmt.alignment === 'center' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'center' }); }} title="Align Center">&#8943;C</button>
+      <button className={`tfb-btn${fmt.alignment === 'right' ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChange({ alignment: 'right' }); }} title="Align Right">&#8943;R</button>
+      <span className="tfb-div" />
+      <label className="tfb-color-wrap" title="Text color" onMouseDown={e => e.stopPropagation()}>
+        <input
+          type="color"
+          className="tfb-color"
+          value={fmt.color || '#000000'}
+          onChange={e => onChange({ color: e.target.value })}
+        />
+        <span className="tfb-color-dot" style={{ background: fmt.color || '#000000' }} />
+      </label>
+    </div>
+  );
+}
 
 /**
  * PDFViewer — MilPDF 2.0
@@ -37,10 +113,13 @@ export default function PDFViewer({
   onImagePlaced,
   onImagePlacementCancel,
 }) {
-  const canvasRef    = useRef(null);
-  const containerRef = useRef(null);
+  const canvasRef      = useRef(null);
+  const containerRef   = useRef(null);
+  const textAreaRef    = useRef(null);
+  const textEditorRef  = useRef(null);
 
-  const textAreaRef = useRef(null);
+  const fontList     = useFontList();
+  const contentBlocks = useContentBlocks(renderDoc, currentPage, zoom, activeTool === 'edit');
   // Refs for gesture state — immune to stale-closure bugs between pointer events
   const cropStartRef  = useRef(null);
   const imageStartRef = useRef(null);
@@ -87,13 +166,17 @@ export default function PDFViewer({
   }, [objects, onSelectionChange]);
 
   useEffect(() => {
+    // Capture the canvas element NOW — before any await — so it stays valid even
+    // if the component unmounts while getPage() is resolving (which happens often
+    // when IntersectionObserver rapidly changes currentPage).
+    const canvas = canvasRef.current;
     let cancelled = false;
-    if (renderDoc && canvasRef.current) {
+    if (renderDoc && canvas) {
       getPage(currentPage).then(entry => {
         if (!entry || cancelled) return;
-        const ctx = canvasRef.current.getContext('2d');
-        canvasRef.current.width = entry.width;
-        canvasRef.current.height = entry.height;
+        const ctx = canvas.getContext('2d');
+        canvas.width = entry.width;
+        canvas.height = entry.height;
         ctx.clearRect(0, 0, entry.width, entry.height);
         ctx.drawImage(entry.bitmap, 0, 0);
         setPageSize({ width: entry.width, height: entry.height });
@@ -123,6 +206,7 @@ export default function PDFViewer({
     if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
   }, [activeTool, setInteractionState]);
   const getCanvasPos = useCallback((e) => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }, []);
@@ -321,16 +405,22 @@ export default function PDFViewer({
           text: textInput.text,
           width: rect.width,
           height: rect.height,
+          fontSize: textInput.fontSize || 16,
+          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontWeight: textInput.fontWeight || 'normal',
+          fontStyle: textInput.fontStyle || 'normal',
+          color: textInput.color || '#000000',
+          alignment: textInput.alignment || 'left',
         });
       } else {
         onAddObject(createBaseObject('text', rect, 'markup', {
           text: textInput.text,
           fontSize: textInput.fontSize || 16,
-          fontFamily: 'Helvetica',
-          fontWeight: 'normal',
-          fontStyle: 'normal',
-          color: '#000000',
-          alignment: 'left',
+          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontWeight: textInput.fontWeight || 'normal',
+          fontStyle: textInput.fontStyle || 'normal',
+          color: textInput.color || '#000000',
+          alignment: textInput.alignment || 'left',
           lineHeight: 1.2,
           autoHeight: false,
         }));
@@ -338,6 +428,22 @@ export default function PDFViewer({
     }
     setTextInput(null);
   }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject]);
+
+  // Only submit when focus leaves the entire text editor container (textarea + format bar).
+  const handleTextContainerBlur = useCallback((e) => {
+    const next = e.relatedTarget;
+    if (next && e.currentTarget.contains(next)) return; // focus stayed inside
+    if (!next) {
+      // Some browsers (Firefox) give null relatedTarget for native select dropdowns.
+      // Wait a tick to let focus settle before checking.
+      setTimeout(() => {
+        if (textEditorRef.current && textEditorRef.current.contains(document.activeElement)) return;
+        handleTextSubmit();
+      }, 150);
+      return;
+    }
+    handleTextSubmit();
+  }, [handleTextSubmit]);
 
   const handleEditSubmit = useCallback(() => {
     if (editInput) {
@@ -353,7 +459,7 @@ export default function PDFViewer({
         );
         onAddObject(createBaseObject('text', textRect, 'markup', {
           text: editInput.text,
-          fontSize: Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
+          fontSize: editInput.fontSize || Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
           fontFamily: 'Helvetica',
           fontWeight: 'normal',
           fontStyle: 'normal',
@@ -635,6 +741,11 @@ export default function PDFViewer({
                   height: rect.height,
                   text: obj.text || '',
                   fontSize: obj.fontSize || 16,
+                  fontFamily: obj.fontFamily || 'Helvetica',
+                  fontWeight: obj.fontWeight || 'normal',
+                  fontStyle: obj.fontStyle || 'normal',
+                  color: obj.color || '#000000',
+                  alignment: obj.alignment || 'left',
                   existingId: obj.id,
                 });
               }}
@@ -742,6 +853,22 @@ export default function PDFViewer({
             />
           )}
 
+          {activeTool === 'edit' && !editInput && contentBlocks.map((block, i) => (
+            <div
+              key={i}
+              className="content-block-handle"
+              style={{ left: block.x, top: block.y, width: block.width, height: block.height }}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => {
+                e.stopPropagation();
+                setEditInput({ x: block.x, y: block.y, width: block.width, height: block.height, text: block.text, fontSize: block.fontSize });
+              }}
+              title="Click to edit"
+            >
+              <span className="content-block-label">T</span>
+            </div>
+          ))}
+
           {activeTool === 'edit' && editRect && (
             <div
               className="edit-overlay"
@@ -763,42 +890,73 @@ export default function PDFViewer({
                 width: editInput.width,
                 height: editInput.height,
               }}
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget)) handleEditSubmit();
+              }}
             >
-              <input
-                type="text"
+              <textarea
                 autoFocus
                 value={editInput.text}
+                onMouseDown={e => e.stopPropagation()}
                 onChange={(e) => setEditInput({ ...editInput, text: e.target.value })}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleEditSubmit();
                   if (e.key === 'Escape') setEditInput(null);
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleEditSubmit();
                 }}
-                onBlur={handleEditSubmit}
-                placeholder="Replacement text (optional)..."
-                style={{ width: '100%', height: '100%' }}
+                placeholder="Replace with… (leave empty to just erase)"
+                style={{
+                  width: '100%', height: '100%', resize: 'none',
+                  fontSize: editInput.fontSize ? `${editInput.fontSize * zoom}px` : undefined,
+                }}
               />
             </div>
           )}
 
           {textInput && (
             <div
-              className="text-input-overlay"
-              style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height }}
+              ref={textEditorRef}
+              style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+              onBlur={handleTextContainerBlur}
             >
-              <textarea
-                ref={textAreaRef}
-                autoFocus
-                value={textInput.text}
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setTextInput(null);
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
-                }}
-                onBlur={handleTextSubmit}
-                placeholder="Type text..."
-                style={{ width: '100%', height: '100%', resize: 'both' }}
-              />
+              <div
+                className="text-format-bar-floating"
+                style={{ left: textInput.x, top: textInput.y - 42, pointerEvents: 'auto' }}
+              >
+                <TextFormatBar
+                  fmt={textInput}
+                  fonts={fontList}
+                  onChange={patch => {
+                    setTextInput(prev => ({ ...prev, ...patch }));
+                    setTimeout(() => textAreaRef.current?.focus(), 0);
+                  }}
+                />
+              </div>
+              <div
+                className="text-input-overlay"
+                style={{ left: textInput.x, top: textInput.y, width: textInput.width, height: textInput.height, pointerEvents: 'auto' }}
+              >
+                <textarea
+                  ref={textAreaRef}
+                  autoFocus
+                  value={textInput.text}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setTextInput(null);
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleTextSubmit();
+                  }}
+                  placeholder="Type text..."
+                  style={{
+                    width: '100%', height: '100%', resize: 'both',
+                    fontSize: `${(textInput.fontSize || 16) * zoom}px`,
+                    fontFamily: textInput.fontFamily || 'Helvetica',
+                    fontWeight: textInput.fontWeight || 'normal',
+                    fontStyle: textInput.fontStyle || 'normal',
+                    color: textInput.color || '#000000',
+                    textAlign: textInput.alignment || 'left',
+                  }}
+                />
+              </div>
             </div>
           )}
 
@@ -860,6 +1018,20 @@ export default function PDFViewer({
         </div>
 
         <div className={RENDER_LAYERS.selection}>
+          {selectionScreen && selectedObjects.length === 1 && selectedObjects[0].type === 'text' && !textInput && (
+            <div
+              className="text-format-bar-floating"
+              style={{ left: selectionScreen.left, top: selectionScreen.top - 42 }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <TextFormatBar
+                fmt={selectedObjects[0]}
+                fonts={fontList}
+                onChange={patch => onUpdateObject(selectedObjects[0].id, patch)}
+              />
+            </div>
+          )}
+
           {selectionScreen && selectedObjects.length > 1 && (
             <div
               className="align-toolbar"

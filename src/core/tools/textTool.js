@@ -29,6 +29,11 @@ export function createTextTool(ctx) {
           height: textBoxRect.height,
           text: '',
           fontSize: 16,
+          fontFamily: 'Helvetica',
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          color: '#000000',
+          alignment: 'left',
         });
         setTextBoxRect(null);
       }

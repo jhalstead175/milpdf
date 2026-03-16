@@ -872,6 +872,13 @@ html.editor-active #root {
   display: block;
 }
 
+.thumbnail-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+}
+
 .thumbnail-placeholder {
   width: 100%;
   aspect-ratio: 8.5 / 11;
@@ -894,28 +901,32 @@ html.editor-active #root {
 /* ===== Multi-page scroller ===== */
 .multi-page-scroller {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow: auto;
   background: #11111b;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 24px;
-  gap: 0;
+  align-items: stretch; /* page-sections fill full width */
 }
 
+/* Each page occupies its own centered row */
 .page-section {
-  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  padding: 24px 24px 0;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-/* When PDFViewer is embedded inside a page-section, suppress its own scroll */
+.page-section:last-child {
+  padding-bottom: 24px;
+}
+
+/* Ghost the pdf-viewer wrapper so .canvas-container centers directly
+   inside .page-section without a double flex-column layer */
 .page-section .pdf-viewer {
-  flex: none;
-  overflow: visible;
-  background: none;
-  padding: 0;
-  gap: 0;
+  display: contents;
 }
 
 /* ===== PDF Viewer ===== */
@@ -966,7 +977,16 @@ html.editor-active #root {
   flex-shrink: 0;
 }
 
-.pdf-layer,
+/* pdf-layer is in-flow so the canvas inside it gives .canvas-container its height.
+   Without this, all children of .canvas-container are position:absolute and the
+   container collapses to 0px — causing every page-section to be 0px tall and all
+   pages to overlap (the "ghost document" bug). */
+.pdf-layer {
+  display: block;
+  line-height: 0;
+}
+
+/* Overlay layers sit on top of the canvas using absolute positioning */
 .annotation-layer,
 .selection-layer,
 .overlay-layer {
@@ -975,6 +995,7 @@ html.editor-active #root {
   left: 0;
   width: 100%;
   height: 100%;
+  touch-action: none; /* prevent browser scroll/zoom interfering with pointer events */
 }
 
 .pdf-canvas {
@@ -1145,6 +1166,108 @@ html.editor-active #root {
 
 .text-input-overlay textarea {
   resize: both;
+}
+
+/* ===== Text Format Bar ===== */
+.text-format-bar-floating {
+  position: absolute;
+  z-index: 200;
+}
+
+.text-format-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+.tfb-select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  height: 26px;
+  cursor: pointer;
+}
+.tfb-select:focus { outline: none; border-color: #34d399; }
+
+.tfb-size {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  width: 46px;
+  height: 26px;
+  text-align: center;
+}
+.tfb-size:focus { outline: none; border-color: #34d399; }
+
+.tfb-btn {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  height: 26px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+.tfb-btn:hover { background: #334155; color: #e2e8f0; }
+.tfb-btn.active { background: #334155; color: #34d399; border-color: #34d399; }
+
+.tfb-div {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: #334155;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.tfb-color-wrap {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+.tfb-color {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tfb-color-wrap:hover .tfb-color { pointer-events: auto; }
+.tfb-color-dot {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #475569;
+  cursor: pointer;
+}
+.tfb-color-wrap:hover .tfb-color-dot { border-color: #34d399; }
+
+/* Make color input accessible via the dot */
+.tfb-color-wrap input[type="color"] {
+  position: absolute;
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  border: none;
+  padding: 0;
 }
 
 /* ===== Crop Overlay ===== */
@@ -1516,7 +1639,8 @@ html.editor-active #root {
   position: absolute;
 }
 
-.edit-input-overlay input {
+.edit-input-overlay input,
+.edit-input-overlay textarea {
   border: 2px solid #34d399;
   border-radius: 0;
   padding: 2px 4px;
@@ -1525,6 +1649,39 @@ html.editor-active #root {
   color: #000;
   outline: none;
   box-sizing: border-box;
+}
+
+/* ===== Content Block Handles (Edit mode) ===== */
+.content-block-handle {
+  position: absolute;
+  border: 1px dashed rgba(52, 211, 153, 0.5);
+  background: rgba(52, 211, 153, 0.04);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.content-block-handle:hover {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.9);
+  border-style: solid;
+}
+
+.content-block-label {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(52, 211, 153, 0.7);
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.content-block-handle:hover .content-block-label {
+  opacity: 1;
 }
 
 .pdf-canvas.tool-edit {
