@@ -14,6 +14,21 @@ function StaticPageCanvas({ renderDoc, pageNum, zoom }) {
   const containerRef = useRef(null);
   const [visible, setVisible] = useState(false);
 
+  // Pre-size the canvas so the page-section has correct height immediately,
+  // preventing zero-height sections from stacking and creating a ghost overlay.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !renderDoc) return;
+    let cancelled = false;
+    renderDoc.getPage(pageNum).then(page => {
+      if (cancelled) return;
+      const viewport = page.getViewport({ scale: zoom });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [renderDoc, pageNum, zoom]);
+
   // Only start rendering when the page section scrolls near the viewport.
   useEffect(() => {
     const el = containerRef.current;
