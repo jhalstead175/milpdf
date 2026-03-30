@@ -221,6 +221,10 @@ function App() {
   const [profile, setProfile] = useState(() => loadProfile());
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [formProfileKey, setFormProfileKey] = useState(null);
+  const activeFormProfile = useMemo(
+    () => (formProfileKey ? FORM_PROFILES[formProfileKey] ?? null : null),
+    [formProfileKey]
+  );
 
   const [layers] = useState({
     base: { name: 'Base PDF', visible: true, locked: true },
