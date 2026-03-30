@@ -2,6 +2,7 @@ export function createRedactTool(ctx) {
   const {
     setRedactStart, setRedactRect, redactStart, redactRect,
     screenRectToPdf, onAddObject, createBaseObject,
+    toolDefaults,
   } = ctx;
 
   return {
@@ -23,7 +24,9 @@ export function createRedactTool(ctx) {
     onMouseUp() {
       if (redactRect && redactRect.width > 5 && redactRect.height > 5) {
         const rect = screenRectToPdf(redactRect.x, redactRect.y, redactRect.width, redactRect.height);
-        onAddObject(createBaseObject('redact', rect, 'annotations'));
+        onAddObject(createBaseObject('redact', rect, 'annotations', {
+          color: toolDefaults.redact?.color || '#000000',
+        }));
         setRedactRect(null);
       }
       setRedactStart(null);

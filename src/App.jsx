@@ -1,22 +1,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import {
-  PanelLeftOpen,
-  PanelLeftClose,
-  PanelRightOpen,
-  PanelRightClose,
-  Layers as LayersIcon,
-  SlidersHorizontal,
-  Shield,
-  Network,
-  MessageSquare,
-} from 'lucide-react';
 import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
 import V3AppShell from './app/AppShell';
-import Toolbar from './components/Toolbar';
 import PageThumbnails from './components/PageThumbnails';
-import DocumentNavigator from './components/DocumentNavigator';
-import PDFViewer from './components/PDFViewer';
 import MultiPageScroller from './components/MultiPageScroller';
 import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
@@ -57,6 +43,47 @@ import { createKernel, CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG } from './cor
 import './App.css';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
+const SHELL_TABS = ['tools', 'annotate', 'pages', 'export'];
+const TOOL_RAIL_ITEMS = [
+  { id: 'select', glyph: 'S', label: 'Select' },
+  { id: 'highlight', glyph: 'H', label: 'Highlight' },
+  { id: 'draw', glyph: 'D', label: 'Draw' },
+  { id: 'text', glyph: 'T', label: 'Text' },
+  { id: 'note', glyph: 'N', label: 'Note' },
+  { id: 'eraser', glyph: 'E', label: 'Eraser' },
+];
+
+function getActiveToolLabel(tool) {
+  if (tool === 'highlight') return 'Highlight';
+  if (tool === 'draw') return 'Draw';
+  if (tool === 'text') return 'Text';
+  if (tool === 'signature') return 'Note';
+  if (tool === 'edit') return 'Eraser';
+  return 'Select';
+}
+
+function getAnnotationSummary(obj) {
+  if (obj.type === 'text') return obj.text?.trim() || 'Text annotation';
+  if (obj.type === 'drawing') return 'Freehand drawing';
+  if (obj.type === 'highlight') return 'Highlight';
+  if (obj.type === 'redact') return 'Redaction';
+  if (obj.type === 'whiteout') return 'Whiteout';
+  if (obj.type === 'signature') return 'Signature';
+  if (obj.type === 'image') return obj.name || 'Image';
+  return obj.name || obj.type;
+}
+
+function triggerJsonDownload(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 function App() {
   const [view, setView] = useState('landing');
@@ -170,14 +197,34 @@ function App() {
   const mergeInputRef = useRef(null);
   const insertFileRef = useRef(null);
   const imageInputRef = useRef(null);
+  const jsonInputRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
   const [imagePlacement, setImagePlacement] = useState(null);
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [rightPanelTab, setRightPanelTab] = useState('layers');
+  const [panelTab, setPanelTab] = useState(null);
+  const [toolDefaults, setToolDefaults] = useState({
+    text: {
+      fontSize: 16,
+      color: '#000000',
+      fontFamily: 'Helvetica',
+    },
+    highlight: {
+      color: '#c9a84c',
+      opacity: 0.35,
+    },
+    draw: {
+      color: '#000000',
+      lineWidth: 2,
+    },
+    redact: {
+      color: '#000000',
+    },
+    edit: {
+      color: '#ffffff',
+      textColor: '#000000',
+      fontSize: 16,
+    },
+  });
 
   const buildPageMeta = useCallback((doc) => (
     doc.getPages().map((page, index) => ({
@@ -368,25 +415,33 @@ function App() {
     }
   }, [pdfDoc, currentPage, insertPosition, updateFromResult]);
 
-  const handleDeletePage = useCallback(async () => {
+  const handleDeletePageAt = useCallback(async (pageNumber) => {
     if (!pdfDoc || numPages <= 1) return;
-    if (!confirm(`Delete page ${currentPage}?`)) return;
+    if (!confirm(`Delete page ${pageNumber}?`)) return;
     setLoading(true);
     try {
-      const result = await deletePage(pdfDoc, currentPage - 1);
+      const result = await deletePage(pdfDoc, pageNumber - 1);
       updateFromResult(result);
-      setCurrentPage(Math.min(currentPage, result.pdfDoc.getPageCount()));
+      setCurrentPage(prev => {
+        if (prev > result.pdfDoc.getPageCount()) return result.pdfDoc.getPageCount();
+        if (prev === pageNumber) return Math.min(pageNumber, result.pdfDoc.getPageCount());
+        return prev > pageNumber ? prev - 1 : prev;
+      });
       commitHistory(prev =>
         prev
-          .filter(a => a.page !== currentPage)
-          .map(a => a.page > currentPage ? { ...a, page: a.page - 1 } : a)
+          .filter(a => a.page !== pageNumber)
+          .map(a => a.page > pageNumber ? { ...a, page: a.page - 1 } : a)
       );
     } catch (err) {
       alert('Failed to delete page: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, currentPage, numPages, updateFromResult, commitHistory]);
+  }, [pdfDoc, numPages, updateFromResult, commitHistory]);
+
+  const handleDeletePage = useCallback(async () => {
+    await handleDeletePageAt(currentPage);
+  }, [handleDeletePageAt, currentPage]);
 
   const handleRotate = useCallback(async (angle) => {
     if (!pdfDoc) return;
@@ -657,28 +712,6 @@ const runDD214Analysis = useCallback(async () => {
     setImagePlacementQueue([]);
   }, []);
 
-  const startSidebarResize = useCallback((side, e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth;
-    const onMove = (ev) => {
-      const dx = ev.clientX - startX;
-      if (side === 'left') {
-        const next = Math.min(420, Math.max(200, startWidth + dx));
-        setLeftSidebarWidth(next);
-      } else {
-        const next = Math.min(420, Math.max(240, startWidth - dx));
-        setRightSidebarWidth(next);
-      }
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [leftSidebarWidth, rightSidebarWidth]);
-
   const handleDeleteObject = useCallback((id) => {
     const obj = objects.find(item => item.id === id);
     if (!obj) return;
@@ -843,6 +876,134 @@ const runDD214Analysis = useCallback(async () => {
     setActiveTool(tool);
   }, [signatureDataUrl, setActiveTool]);
 
+  const setCurrentPageAndScroll = useCallback((page) => {
+    setCurrentPage(page);
+    scrollerRef.current?.scrollToPage(page);
+  }, []);
+
+  const togglePanelTab = useCallback((tab) => {
+    setPanelTab(prev => (prev === tab ? null : tab));
+  }, []);
+
+  const handleRailToolClick = useCallback((toolId) => {
+    if (toolId === 'note') {
+      handleToolChange('signature');
+      return;
+    }
+    if (toolId === 'eraser') {
+      setActiveTool('edit');
+      return;
+    }
+    setActiveTool(toolId);
+  }, [handleToolChange, setActiveTool]);
+
+  const handleToolDefaultChange = useCallback((tool, key, value) => {
+    setToolDefaults(prev => ({
+      ...prev,
+      [tool]: {
+        ...prev[tool],
+        [key]: value,
+      },
+    }));
+  }, []);
+
+  const handleExportJson = useCallback(() => {
+    if (!renderDoc) return;
+    triggerJsonDownload({
+      version: 1,
+      fileName,
+      exportedAt: new Date().toISOString(),
+      annotationCount: objects.length,
+      annotations: objects,
+    }, fileName.replace(/\.pdf$/i, '_annotations.json'));
+  }, [renderDoc, fileName, objects]);
+
+  const handleImportJson = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const imported = Array.isArray(parsed) ? parsed : parsed.annotations;
+      if (!Array.isArray(imported)) {
+        throw new Error('Invalid annotation JSON.');
+      }
+      if (objects.length > 0 && !confirm('Replace current annotations with the imported JSON?')) {
+        return;
+      }
+      resetObjects(imported);
+      setSelection([]);
+      const nextPage = imported.reduce((max, item) => Math.max(max, item.page || 1), 1);
+      setCurrentPage(Math.min(numPages || 1, nextPage));
+    } catch (err) {
+      alert('Failed to import JSON: ' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  }, [objects.length, resetObjects, setSelection, numPages]);
+
+  const activeToolConfig = useMemo(() => {
+    if (activeTool === 'highlight') {
+      return {
+        key: 'highlight',
+        title: 'Highlight',
+        fields: [
+          { key: 'color', label: 'Color', type: 'color' },
+          { key: 'opacity', label: 'Opacity', type: 'range', min: 0.1, max: 0.8, step: 0.05 },
+        ],
+      };
+    }
+    if (activeTool === 'draw') {
+      return {
+        key: 'draw',
+        title: 'Draw',
+        fields: [
+          { key: 'color', label: 'Ink', type: 'color' },
+          { key: 'lineWidth', label: 'Stroke', type: 'range', min: 1, max: 8, step: 1 },
+        ],
+      };
+    }
+    if (activeTool === 'text') {
+      return {
+        key: 'text',
+        title: 'Text',
+        fields: [
+          { key: 'color', label: 'Color', type: 'color' },
+          { key: 'fontSize', label: 'Size', type: 'range', min: 10, max: 48, step: 1 },
+        ],
+      };
+    }
+    if (activeTool === 'edit') {
+      return {
+        key: 'edit',
+        title: 'Eraser',
+        fields: [
+          { key: 'color', label: 'Fill', type: 'color' },
+          { key: 'fontSize', label: 'Text Size', type: 'range', min: 10, max: 36, step: 1 },
+        ],
+      };
+    }
+    if (activeTool === 'redact') {
+      return {
+        key: 'redact',
+        title: 'Redaction',
+        fields: [
+          { key: 'color', label: 'Fill', type: 'color' },
+        ],
+      };
+    }
+    return {
+      key: 'select',
+      title: getActiveToolLabel(activeTool),
+      fields: [],
+    };
+  }, [activeTool]);
+
+  const pageAnnotations = useMemo(
+    () => currentPageObjects.filter(obj => obj.type !== 'formField'),
+    [currentPageObjects]
+  );
+
     const commandContext = useMemo(() => ({
       hasDoc: !!renderDoc,
       setActiveTool,
@@ -989,20 +1150,29 @@ const runDD214Analysis = useCallback(async () => {
         />
       ) : (
     <div className="app">
-      <Toolbar
-        runCommand={runCommand}
-        activeTool={activeTool}
-        zoom={zoom}
-        hasDoc={!!renderDoc}
-        currentPage={currentPage}
-        numPages={numPages}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        watermarkText={watermarkText}
-        canZOrder={selectionIds.length > 0}
-        isV3={showV3}
-        onToggleV3={() => setShowV3(prev => !prev)}
-      />
+      <div className="acrobat-topbar">
+        <div className="acrobat-tabs">
+          {SHELL_TABS.map((tab) => (
+            <button
+              key={tab}
+              className={`acrobat-tab ${panelTab === tab ? 'active' : ''}`}
+              onClick={() => togglePanelTab(tab)}
+            >
+              {tab.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="acrobat-topbar-right">
+          <div className="acrobat-file-display" title={fileName}>
+            {fileName}
+          </div>
+          <div className="acrobat-zoom-controls">
+            <button onClick={() => runCommand('view.zoom.out')} disabled={!renderDoc || zoom <= 0.25}>-</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => runCommand('view.zoom.in')} disabled={!renderDoc || zoom >= 3}>+</button>
+          </div>
+        </div>
+      </div>
 
       {activeFormProfile && (
         <div className="form-profile-banner">
@@ -1024,189 +1194,252 @@ const runDD214Analysis = useCallback(async () => {
         {showV3 ? (
           <V3AppShell />
         ) : (
-          <>
-            {leftCollapsed ? (
-              <div className="sidebar-collapsed">
-                <button onClick={() => setLeftCollapsed(false)} title="Show Pages">
-                  <PanelLeftOpen size={18} />
-                </button>
-              </div>
-            ) : (
-              <div className="sidebar" style={{ width: leftSidebarWidth }}>
-                <div className="sidebar-header">
-                  Pages
-                  <button onClick={() => setLeftCollapsed(true)} title="Collapse sidebar">
-                    <PanelLeftClose size={16} />
+          <div className={`editor-shell ${panelTab ? 'panel-open' : 'panel-closed'}`}>
+            <div className="tool-rail">
+              {TOOL_RAIL_ITEMS.map((item) => {
+                const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
+                const isActive = activeTool === mappedTool;
+                return (
+                  <button
+                    key={item.id}
+                    className={`tool-rail-button ${isActive ? 'active' : ''}`}
+                    onClick={() => handleRailToolClick(item.id)}
+                    title={item.label}
+                    disabled={!renderDoc}
+                  >
+                    <span>{item.glyph}</span>
                   </button>
-                </div>
-                <PageThumbnails
+                );
+              })}
+            </div>
+
+            <div className={`context-panel ${panelTab ? 'open' : ''}`}>
+              <div className="context-panel-header">
+                <span>{panelTab ? panelTab.toUpperCase() : ''}</span>
+                <button onClick={() => setPanelTab(null)} title="Collapse panel">&lt;</button>
+              </div>
+              <div className="context-panel-body">
+                {panelTab === 'tools' && (
+                  <>
+                    {!renderDoc && (
+                      <div className="context-card">
+                        <div className="context-card-title">Open a PDF</div>
+                        <button className="btn-primary" onClick={handleOpen}>Open Document</button>
+                      </div>
+                    )}
+                    <div className="context-card">
+                      <div className="context-card-title">Active Tool</div>
+                      <div className="context-tool-name">{activeToolConfig.title}</div>
+                      {activeToolConfig.fields.length === 0 ? (
+                        <div className="context-muted">No adjustable options for this tool.</div>
+                      ) : (
+                        activeToolConfig.fields.map((field) => {
+                          const value = toolDefaults[activeToolConfig.key]?.[field.key];
+                          return (
+                            <label key={field.key} className="context-field">
+                              <span>{field.label}</span>
+                              {field.type === 'color' ? (
+                                <input
+                                  type="color"
+                                  value={value}
+                                  onChange={(e) => handleToolDefaultChange(activeToolConfig.key, field.key, e.target.value)}
+                                />
+                              ) : (
+                                <>
+                                  <input
+                                    type="range"
+                                    min={field.min}
+                                    max={field.max}
+                                    step={field.step}
+                                    value={value}
+                                    onChange={(e) => handleToolDefaultChange(
+                                      activeToolConfig.key,
+                                      field.key,
+                                      Number(e.target.value)
+                                    )}
+                                  />
+                                  <strong>{value}</strong>
+                                </>
+                              )}
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="context-card">
+                      <div className="context-card-title">Document Actions</div>
+                      <div className="context-actions">
+                        <button className="btn-secondary" onClick={handleOpen}>Open</button>
+                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc}>Save</button>
+                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc}>Save As</button>
+                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc}>Print</button>
+                        <button className="btn-secondary" onClick={handleImportImages} disabled={!renderDoc}>Import Images</button>
+                        <button className="btn-secondary" onClick={() => setShowSignaturePad(true)} disabled={!renderDoc}>Signature</button>
+                        <button className="btn-secondary" onClick={handleMerge} disabled={!renderDoc}>Merge PDF</button>
+                        <button className="btn-secondary" onClick={() => setShowV3(prev => !prev)}>
+                          {showV3 ? 'Editor Shell' : 'V3 Shell'}
+                        </button>
+                      </div>
+                    </div>
+                    <LayersPanel
+                      objects={currentPageObjects}
+                      selectionIds={selectionIds}
+                      onSelectionChange={setSelection}
+                      onToggleVisible={handleToggleVisible}
+                      onToggleLocked={handleToggleLocked}
+                      onReorder={handleLayerReorder}
+                    />
+                    <InspectorPanel
+                      selectedObjects={selectedObjects}
+                      onUpdateObject={handleUpdateObject}
+                    />
+                  </>
+                )}
+
+                {panelTab === 'annotate' && (
+                  <>
+                    <div className="context-card">
+                      <div className="context-card-title">Current Page Annotations</div>
+                      {pageAnnotations.length === 0 ? (
+                        <div className="context-muted">No annotations on this page.</div>
+                      ) : (
+                        <div className="annotation-list">
+                          {pageAnnotations.map((obj) => (
+                            <div
+                              key={obj.id}
+                              className={`annotation-list-item ${selectionIds.includes(obj.id) ? 'selected' : ''}`}
+                            >
+                              <button
+                                className="annotation-select"
+                                onClick={() => {
+                                  setSelection([obj.id]);
+                                  setActiveTool('select');
+                                }}
+                              >
+                                <strong>{obj.type}</strong>
+                                <span>{getAnnotationSummary(obj)}</span>
+                              </button>
+                              <button
+                                className="annotation-delete-btn"
+                                onClick={() => handleDeleteObject(obj.id)}
+                                title="Delete annotation"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <EvidencePanel
+                      markers={evidenceIndex.markers}
+                      exhibits={evidenceIndex.exhibits}
+                      onJumpToPage={setCurrentPageAndScroll}
+                      onExportBundle={handleExportEvidenceBundle}
+                    />
+                    <CaseGraph
+                      graph={caseGraph}
+                      onNavigate={setCurrentPageAndScroll}
+                    />
+                    <AvaPanel onAsk={handleAskAva} />
+                  </>
+                )}
+
+                {panelTab === 'pages' && (
+                  <>
+                    <div className="context-card">
+                      <div className="context-card-title">Page Actions</div>
+                      <div className="context-actions">
+                        <button className="btn-secondary" onClick={handleAddBlank} disabled={!renderDoc}>Insert Blank</button>
+                        <button className="btn-secondary" onClick={() => handleRotate(90)} disabled={!renderDoc}>Rotate 90</button>
+                        <button className="btn-secondary" onClick={handleDeletePage} disabled={!renderDoc || numPages <= 1}>Delete Current</button>
+                        <button className="btn-secondary" onClick={handleSplit} disabled={!renderDoc || numPages <= 1}>Split / Extract</button>
+                      </div>
+                    </div>
+                    <PageThumbnails
+                      renderDoc={renderDoc}
+                      numPages={numPages}
+                      currentPage={currentPage}
+                      onPageSelect={setCurrentPageAndScroll}
+                      onReorder={handleReorder}
+                      onDeletePage={handleDeletePageAt}
+                      showHeader={false}
+                    />
+                  </>
+                )}
+
+                {panelTab === 'export' && (
+                  <>
+                    <div className="context-card">
+                      <div className="context-card-title">Annotation Data</div>
+                      <div className="context-summary">Total annotations: <strong>{objects.length}</strong></div>
+                      <div className="context-actions">
+                        <button className="btn-secondary" onClick={handleExportJson} disabled={!renderDoc}>Export JSON</button>
+                        <button className="btn-secondary" onClick={() => jsonInputRef.current?.click()} disabled={!renderDoc}>Import JSON</button>
+                      </div>
+                    </div>
+                    <div className="context-card">
+                      <div className="context-card-title">Document Export</div>
+                      <div className="context-actions">
+                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc}>Save PDF</button>
+                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc}>Save As</button>
+                        <button className="btn-secondary" onClick={handleExportWord} disabled={!renderDoc}>Export Word</button>
+                        <button className="btn-secondary" onClick={handleWatermark} disabled={!renderDoc}>
+                          {watermarkText ? 'Remove Watermark' : 'Add Watermark'}
+                        </button>
+                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc}>Print</button>
+                        {import.meta.env?.DEV && (
+                          <button className="btn-secondary" onClick={handleKernelHealthCheck}>Kernel Health</button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="canvas-stage">
+              <div className="canvas-stage-inner">
+                <MultiPageScroller
+                  ref={scrollerRef}
                   renderDoc={renderDoc}
                   numPages={numPages}
                   currentPage={currentPage}
-                  onPageSelect={(n) => {
-                    setCurrentPage(n);
-                    scrollerRef.current?.scrollToPage(n);
-                  }}
-                  onReorder={handleReorder}
+                  zoom={zoom}
+                  onCurrentPageChange={setCurrentPage}
+                  activeTool={activeTool}
+                  objects={objects}
+                  pageObjects={currentPageObjects}
+                  layers={layers}
+                  selectionIds={selectionIds}
+                  onSelectionChange={setSelection}
+                  interactionState={interactionState}
+                  setInteractionState={setInteractionState}
+                  onAddObject={handleAddObject}
+                  onDeleteObject={handleDeleteObject}
+                  onUpdateObject={handleUpdateObject}
+                  onBatchUpdateObjects={handleBatchUpdateObjects}
+                  signatureDataUrl={signatureDataUrl}
+                  onRequestSignature={() => setShowSignaturePad(true)}
+                  onCropApply={handleCropApply}
+                  onCropCancel={() => setActiveTool('select')}
+                  onDropFile={loadFile}
+                  watermarkText={watermarkText}
+                  imagePlacement={imagePlacement}
+                  onImagePlaced={handleImagePlaced}
+                  onImagePlacementCancel={handleImagePlacementCancel}
+                  toolDefaults={toolDefaults}
                 />
-                <DocumentNavigator
-                  renderDoc={renderDoc}
-                  numPages={numPages}
-                  currentPage={currentPage}
-                  onPageSelect={(n) => {
-                    setCurrentPage(n);
-                    scrollerRef.current?.scrollToPage(n);
-                  }}
-                />
               </div>
-            )}
-
-            {!leftCollapsed && (
-              <div
-                className="sidebar-resizer"
-                onMouseDown={(e) => startSidebarResize('left', e)}
-              />
-            )}
-
-            <MultiPageScroller
-              ref={scrollerRef}
-              renderDoc={renderDoc}
-              numPages={numPages}
-              currentPage={currentPage}
-              zoom={zoom}
-              onCurrentPageChange={setCurrentPage}
-              activeTool={activeTool}
-              objects={objects}
-              pageObjects={currentPageObjects}
-              layers={layers}
-              selectionIds={selectionIds}
-              onSelectionChange={setSelection}
-              interactionState={interactionState}
-              setInteractionState={setInteractionState}
-              onAddObject={handleAddObject}
-              onDeleteObject={handleDeleteObject}
-              onUpdateObject={handleUpdateObject}
-              onBatchUpdateObjects={handleBatchUpdateObjects}
-              signatureDataUrl={signatureDataUrl}
-              onRequestSignature={() => setShowSignaturePad(true)}
-              onCropApply={handleCropApply}
-              onCropCancel={() => setActiveTool('select')}
-              onDropFile={loadFile}
-              watermarkText={watermarkText}
-              imagePlacement={imagePlacement}
-              onImagePlaced={handleImagePlaced}
-              onImagePlacementCancel={handleImagePlacementCancel}
-            />
-
-            {!rightCollapsed && (
-              <div
-                className="sidebar-resizer"
-                onMouseDown={(e) => startSidebarResize('right', e)}
-              />
-            )}
-
-            {rightCollapsed ? (
-              <div className="sidebar-collapsed right">
-                <button onClick={() => setRightCollapsed(false)} title="Show Panels">
-                  <PanelRightOpen size={18} />
-                </button>
-                <button onClick={() => { setRightPanelTab('layers'); setRightCollapsed(false); }} title="Layers">
-                  <LayersIcon size={16} />
-                </button>
-                <button onClick={() => { setRightPanelTab('inspector'); setRightCollapsed(false); }} title="Inspector">
-                  <SlidersHorizontal size={16} />
-                </button>
-                <button onClick={() => { setRightPanelTab('evidence'); setRightCollapsed(false); }} title="Evidence">
-                  <Shield size={16} />
-                </button>
-                <button onClick={() => { setRightPanelTab('caseGraph'); setRightCollapsed(false); }} title="Case Graph">
-                  <Network size={16} />
-                </button>
-                <button onClick={() => { setRightPanelTab('ava'); setRightCollapsed(false); }} title="Ava">
-                  <MessageSquare size={16} />
-                </button>
-              </div>
-            ) : (
-              <div className="sidebar-right" style={{ width: rightSidebarWidth }}>
-                <div className="sidebar-header">
-                  Panels
-                  <button onClick={() => setRightCollapsed(true)} title="Collapse sidebar">
-                    <PanelRightClose size={16} />
-                  </button>
+              {renderDoc && (
+                <div className="canvas-page-pill">
+                  <button onClick={() => setCurrentPageAndScroll(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
+                  <span>{currentPage} / {numPages}</span>
+                  <button onClick={() => setCurrentPageAndScroll(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
                 </div>
-                <div className="sidebar-tabs">
-                  <button
-                    className={rightPanelTab === 'layers' ? 'active' : ''}
-                    onClick={() => setRightPanelTab('layers')}
-                    title="Layers"
-                  >
-                    <LayersIcon size={16} />
-                  </button>
-                  <button
-                    className={rightPanelTab === 'inspector' ? 'active' : ''}
-                    onClick={() => setRightPanelTab('inspector')}
-                    title="Inspector"
-                  >
-                    <SlidersHorizontal size={16} />
-                  </button>
-                  <button
-                    className={rightPanelTab === 'evidence' ? 'active' : ''}
-                    onClick={() => setRightPanelTab('evidence')}
-                    title="Evidence"
-                  >
-                    <Shield size={16} />
-                  </button>
-                  <button
-                    className={rightPanelTab === 'caseGraph' ? 'active' : ''}
-                    onClick={() => setRightPanelTab('caseGraph')}
-                    title="Case Graph"
-                  >
-                    <Network size={16} />
-                  </button>
-                  <button
-                    className={rightPanelTab === 'ava' ? 'active' : ''}
-                    onClick={() => setRightPanelTab('ava')}
-                    title="Ava"
-                  >
-                    <MessageSquare size={16} />
-                  </button>
-                </div>
-                {rightPanelTab === 'layers' && (
-                  <LayersPanel
-                    objects={currentPageObjects}
-                    selectionIds={selectionIds}
-                    onSelectionChange={setSelection}
-                    onToggleVisible={handleToggleVisible}
-                    onToggleLocked={handleToggleLocked}
-                    onReorder={handleLayerReorder}
-                  />
-                )}
-                {rightPanelTab === 'inspector' && (
-                  <InspectorPanel
-                    selectedObjects={selectedObjects}
-                    onUpdateObject={handleUpdateObject}
-                  />
-                )}
-                {rightPanelTab === 'evidence' && (
-                  <EvidencePanel
-                    markers={evidenceIndex.markers}
-                    exhibits={evidenceIndex.exhibits}
-                    onJumpToPage={setCurrentPage}
-                    onExportBundle={handleExportEvidenceBundle}
-                  />
-                )}
-                {rightPanelTab === 'caseGraph' && (
-                  <CaseGraph
-                    graph={caseGraph}
-                    onNavigate={setCurrentPage}
-                  />
-                )}
-                {rightPanelTab === 'ava' && (
-                  <AvaPanel onAsk={handleAskAva} />
-                )}
-              </div>
-            )}
-          </>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -1329,6 +1562,13 @@ const runDD214Analysis = useCallback(async () => {
         multiple
         style={{ display: 'none' }}
         onChange={handleImageFiles}
+      />
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        style={{ display: 'none' }}
+        onChange={handleImportJson}
       />
     </div>
       )}

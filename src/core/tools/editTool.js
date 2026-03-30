@@ -1,6 +1,7 @@
 export function createEditTool(ctx) {
   const {
     setEditStart, setEditRect, editStart, editRect, setEditInput,
+    toolDefaults,
   } = ctx;
 
   return {
@@ -27,6 +28,7 @@ export function createEditTool(ctx) {
           width: editRect.width,
           height: editRect.height,
           text: '',
+          fontSize: toolDefaults.edit?.fontSize || 16,
         });
         setEditRect(null);
       }

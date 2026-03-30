@@ -2,6 +2,7 @@ export function createDrawTool(ctx) {
   const {
     setDrawingPoints, drawingPoints,
     screenToPdfPoint, onAddObject, createBaseObject,
+    toolDefaults,
   } = ctx;
 
   return {
@@ -26,8 +27,8 @@ export function createDrawTool(ctx) {
         };
         onAddObject(createBaseObject('drawing', rect, 'annotations', {
           pdfPoints: drawingPoints,
-          color: '#000000',
-          lineWidth: 2,
+          color: toolDefaults.draw?.color || '#000000',
+          lineWidth: toolDefaults.draw?.lineWidth || 2,
         }));
       }
       setDrawingPoints(null);

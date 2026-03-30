@@ -112,6 +112,7 @@ export default function PDFViewer({
   imagePlacement,
   onImagePlaced,
   onImagePlacementCancel,
+  toolDefaults = {},
 }) {
   const canvasRef      = useRef(null);
   const containerRef   = useRef(null);
@@ -352,6 +353,7 @@ export default function PDFViewer({
     onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
+    toolDefaults,
     createBaseObject, onAddObject,
   }), [
     selection, setSelection, onSelectionChange, renderObjects, visibleObjects, layers,
@@ -370,6 +372,7 @@ export default function PDFViewer({
     onImagePlaced, onImagePlacementCancel,
     setEditStart, setEditRect, editStart, editRect, setEditInput,
     signatureDataUrl, onRequestSignature,
+    toolDefaults,
     createBaseObject, onAddObject,
   ]);
 
@@ -405,21 +408,21 @@ export default function PDFViewer({
           text: textInput.text,
           width: rect.width,
           height: rect.height,
-          fontSize: textInput.fontSize || 16,
-          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontSize: textInput.fontSize || toolDefaults.text?.fontSize || 16,
+          fontFamily: textInput.fontFamily || toolDefaults.text?.fontFamily || 'Helvetica',
           fontWeight: textInput.fontWeight || 'normal',
           fontStyle: textInput.fontStyle || 'normal',
-          color: textInput.color || '#000000',
+          color: textInput.color || toolDefaults.text?.color || '#000000',
           alignment: textInput.alignment || 'left',
         });
       } else {
         onAddObject(createBaseObject('text', rect, 'markup', {
           text: textInput.text,
-          fontSize: textInput.fontSize || 16,
-          fontFamily: textInput.fontFamily || 'Helvetica',
+          fontSize: textInput.fontSize || toolDefaults.text?.fontSize || 16,
+          fontFamily: textInput.fontFamily || toolDefaults.text?.fontFamily || 'Helvetica',
           fontWeight: textInput.fontWeight || 'normal',
           fontStyle: textInput.fontStyle || 'normal',
-          color: textInput.color || '#000000',
+          color: textInput.color || toolDefaults.text?.color || '#000000',
           alignment: textInput.alignment || 'left',
           lineHeight: 1.2,
           autoHeight: false,
@@ -427,7 +430,7 @@ export default function PDFViewer({
       }
     }
     setTextInput(null);
-  }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject]);
+  }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject, toolDefaults]);
 
   // Only submit when focus leaves the entire text editor container (textarea + format bar).
   const handleTextContainerBlur = useCallback((e) => {
@@ -448,7 +451,9 @@ export default function PDFViewer({
   const handleEditSubmit = useCallback(() => {
     if (editInput) {
       const rect = screenRectToPdf(editInput.x, editInput.y, editInput.width, editInput.height);
-      onAddObject(createBaseObject('whiteout', rect, 'markup'));
+      onAddObject(createBaseObject('whiteout', rect, 'markup', {
+        color: toolDefaults.edit?.color || '#ffffff',
+      }));
       if (editInput.text.trim()) {
         const padding = 4;
         const textRect = screenRectToPdf(
@@ -459,11 +464,11 @@ export default function PDFViewer({
         );
         onAddObject(createBaseObject('text', textRect, 'markup', {
           text: editInput.text,
-          fontSize: editInput.fontSize || Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
-          fontFamily: 'Helvetica',
+          fontSize: editInput.fontSize || toolDefaults.edit?.fontSize || Math.min(16, Math.max(10, Math.round(textRect.height * 0.6))),
+          fontFamily: toolDefaults.text?.fontFamily || 'Helvetica',
           fontWeight: 'normal',
           fontStyle: 'normal',
-          color: '#000000',
+          color: toolDefaults.edit?.textColor || '#000000',
           alignment: 'left',
           lineHeight: 1.2,
           autoHeight: false,
@@ -471,7 +476,7 @@ export default function PDFViewer({
       }
     }
     setEditInput(null);
-  }, [editInput, screenRectToPdf, onAddObject, createBaseObject]);
+  }, [editInput, screenRectToPdf, onAddObject, createBaseObject, toolDefaults]);
   const handlePointerDown = useCallback((e) => {
     if (!canvasRef.current) return;
     if (e.button !== 0) return;

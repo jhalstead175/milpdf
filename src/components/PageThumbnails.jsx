@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { renderPageToCanvas } from '../utils/pdfUtils';
 
 export default function PageThumbnails({
-  renderDoc, numPages, currentPage, onPageSelect, onReorder,
+  renderDoc, numPages, currentPage, onPageSelect, onReorder, onDeletePage, showHeader = true,
 }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dropIndex, setDropIndex] = useState(null);
@@ -11,7 +11,7 @@ export default function PageThumbnails({
 
   return (
     <div className="page-thumbnails">
-      <h3>Pages</h3>
+      {showHeader && <h3>Pages</h3>}
       <div
         className="thumbnail-list"
         onDragOver={(e) => e.preventDefault()}
@@ -42,6 +42,7 @@ export default function PageThumbnails({
             }}
             onDragEnd={() => { setDragIndex(null); setDropIndex(null); }}
             isDragOver={dropIndex === i && dragIndex !== i}
+            onDelete={onDeletePage ? () => onDeletePage(i + 1) : null}
           />
         ))}
       </div>
@@ -52,6 +53,7 @@ export default function PageThumbnails({
 function ThumbnailItem({
   renderDoc, index, isActive, onSelect,
   onDragStart, onDragOver, onDrop, onDragEnd, isDragOver,
+  onDelete,
 }) {
   const [imgSrc, setImgSrc] = useState(null);
 
@@ -97,6 +99,18 @@ function ThumbnailItem({
         ? <img src={imgSrc} alt={`Page ${index + 1}`} className="thumbnail-img" />
         : <div className="thumbnail-placeholder" />
       }
+      {onDelete && (
+        <button
+          className="thumbnail-delete"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title={`Delete page ${index + 1}`}
+        >
+          ×
+        </button>
+      )}
       <span className="page-number">{index + 1}</span>
     </div>
   );

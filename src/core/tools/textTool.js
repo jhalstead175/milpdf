@@ -2,6 +2,7 @@ export function createTextTool(ctx) {
   const {
     setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
     setTextInput,
+    toolDefaults,
   } = ctx;
 
   return {
@@ -28,11 +29,11 @@ export function createTextTool(ctx) {
           width: textBoxRect.width,
           height: textBoxRect.height,
           text: '',
-          fontSize: 16,
-          fontFamily: 'Helvetica',
+          fontSize: toolDefaults.text?.fontSize || 16,
+          fontFamily: toolDefaults.text?.fontFamily || 'Helvetica',
           fontWeight: 'normal',
           fontStyle: 'normal',
-          color: '#000000',
+          color: toolDefaults.text?.color || '#000000',
           alignment: 'left',
         });
         setTextBoxRect(null);
