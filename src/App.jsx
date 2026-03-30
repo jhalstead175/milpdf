@@ -238,10 +238,8 @@ function App() {
   const insertFileRef = useRef(null);
   const imageInputRef = useRef(null);
   const jsonInputRef = useRef(null);
-  const scrollContainerRef = useRef(null);
-  const pageSectionRefs = useRef(new Map());
-  const scrollSyncTimeoutRef = useRef(null);
-  const isScrollSyncingRef = useRef(false);
+  const wheelAccumulatorRef = useRef(0);
+  const wheelResetTimeoutRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
   const [imagePlacement, setImagePlacement] = useState(null);
@@ -645,14 +643,6 @@ const currentPageObjects = useMemo(
 () => currentPageMeta?.objects || [],
  [currentPageMeta]
 );
-const pageEntries = useMemo(
-() => pages.map((page) => ({
-  pageNumber: page.number,
-  pageId: page.id ?? null,
-  pageObjects: page.objects || [],
-})),
-[pages]
-);
 const runDD214Analysis = useCallback(async () => {
     if (!renderDoc) return;
     setLoading(true);
@@ -977,59 +967,40 @@ const runDD214Analysis = useCallback(async () => {
     setActiveTool(tool);
   }, [signatureDataUrl, setActiveTool]);
 
-  const registerPageSection = useCallback((pageNumber, node) => {
-    if (node) pageSectionRefs.current.set(pageNumber, node);
-    else pageSectionRefs.current.delete(pageNumber);
-  }, []);
-
-  const setCurrentPageAndScroll = useCallback((page, options = {}) => {
-    const behavior = options.behavior ?? 'smooth';
+  const setCurrentPageAndScroll = useCallback((page) => {
     const clampedPage = Math.min(Math.max(page, 1), Math.max(numPages, 1));
     setCurrentPage(clampedPage);
-    const section = pageSectionRefs.current.get(clampedPage);
-    if (!section) return;
-    isScrollSyncingRef.current = true;
-    if (scrollSyncTimeoutRef.current) window.clearTimeout(scrollSyncTimeoutRef.current);
-    section.scrollIntoView({ behavior, block: 'start' });
-    scrollSyncTimeoutRef.current = window.setTimeout(() => {
-      isScrollSyncingRef.current = false;
-    }, behavior === 'smooth' ? 350 : 0);
+    wheelAccumulatorRef.current = 0;
   }, [numPages]);
 
+  const handleViewerWheel = useCallback((e) => {
+    if (!renderDoc || numPages <= 1) return;
+    wheelAccumulatorRef.current += e.deltaY;
+    const threshold = 120;
+
+    if (wheelAccumulatorRef.current >= threshold && currentPage < numPages) {
+      e.preventDefault();
+      wheelAccumulatorRef.current = 0;
+      setCurrentPage(currentPage + 1);
+      return;
+    }
+
+    if (wheelAccumulatorRef.current <= -threshold && currentPage > 1) {
+      e.preventDefault();
+      wheelAccumulatorRef.current = 0;
+      setCurrentPage(currentPage - 1);
+      return;
+    }
+
+    window.clearTimeout(wheelResetTimeoutRef.current);
+    wheelResetTimeoutRef.current = window.setTimeout(() => {
+      wheelAccumulatorRef.current = 0;
+    }, 180);
+  }, [currentPage, numPages, renderDoc]);
+
   useEffect(() => () => {
-    if (scrollSyncTimeoutRef.current) window.clearTimeout(scrollSyncTimeoutRef.current);
+    window.clearTimeout(wheelResetTimeoutRef.current);
   }, []);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || !renderDoc) return;
-
-    const updateCurrentPageFromScroll = () => {
-      if (isScrollSyncingRef.current) return;
-      const viewportCenter = container.scrollTop + container.clientHeight / 2;
-      let nextPage = currentPage;
-      let smallestDistance = Number.POSITIVE_INFINITY;
-
-      pageSectionRefs.current.forEach((node, pageNumber) => {
-        const pageCenter = node.offsetTop + node.offsetHeight / 2;
-        const distance = Math.abs(pageCenter - viewportCenter);
-        if (distance < smallestDistance) {
-          smallestDistance = distance;
-          nextPage = pageNumber;
-        }
-      });
-
-      if (nextPage !== currentPage) setCurrentPage(nextPage);
-    };
-
-    updateCurrentPageFromScroll();
-    container.addEventListener('scroll', updateCurrentPageFromScroll, { passive: true });
-    window.addEventListener('resize', updateCurrentPageFromScroll);
-    return () => {
-      container.removeEventListener('scroll', updateCurrentPageFromScroll);
-      window.removeEventListener('resize', updateCurrentPageFromScroll);
-    };
-  }, [currentPage, renderDoc]);
 
   const togglePanelTab = useCallback((tab) => {
     setPanelTab(prev => (prev === tab ? null : tab));
@@ -1560,56 +1531,44 @@ const runDD214Analysis = useCallback(async () => {
             </div>
 
             <div className="canvas-stage">
-              <div ref={scrollContainerRef} className="canvas-scroll-container">
+              <div className="canvas-scroll-container" onWheel={handleViewerWheel}>
                 <div className="canvas-stage-inner">
-                  {pageEntries.map(({ pageNumber, pageId, pageObjects }) => {
-                    const isActivePage = pageNumber === currentPage;
-                    return (
-                      <div
-                        key={pageId || pageNumber}
-                        ref={(node) => registerPageSection(pageNumber, node)}
-                        className="page-section"
-                        onMouseDown={() => {
-                          if (!isActivePage) setCurrentPage(pageNumber);
-                        }}
-                      >
-                        <PDFViewer
-                          renderDoc={renderDoc}
-                          currentPage={pageNumber}
-                          zoom={zoom}
-                          activeTool={isActivePage ? activeTool : 'select'}
-                          objects={objects}
-                          pageObjects={pageObjects}
-                          currentPageId={pageId}
-                          layers={layers}
-                          selectionIds={isActivePage ? selectionIds : []}
-                          onSelectionChange={isActivePage ? setSelection : undefined}
-                          interactionState={isActivePage ? interactionState : createInteractionState()}
-                          setInteractionState={isActivePage ? setInteractionState : undefined}
-                          onAddObject={isActivePage ? handleAddObject : undefined}
-                          onDeleteObject={isActivePage ? handleDeleteObject : undefined}
-                          onUpdateObject={isActivePage ? handleUpdateObject : undefined}
-                          onBatchUpdateObjects={isActivePage ? handleBatchUpdateObjects : undefined}
-                          signatureDataUrl={signatureDataUrl}
-                          onRequestSignature={() => setShowSignaturePad(true)}
-                          onCropApply={isActivePage ? handleCropApply : undefined}
-                          onCropCancel={() => setActiveTool('select')}
-                          onDropFile={loadFile}
-                          watermarkText={watermarkText}
-                          imagePlacement={isActivePage ? imagePlacement : null}
-                          onImagePlaced={isActivePage ? handleImagePlaced : undefined}
-                          onImagePlacementCancel={isActivePage ? handleImagePlacementCancel : undefined}
-                          toolDefaults={toolDefaults}
-                          pdfjsReady={pdfjsReady}
-                        />
-                      </div>
-                    );
-                  })}
+                  <PDFViewer
+                    renderDoc={renderDoc}
+                    currentPage={currentPage}
+                    zoom={zoom}
+                    activeTool={activeTool}
+                    objects={objects}
+                    pageObjects={currentPageObjects}
+                    currentPageId={currentPageMeta?.id || null}
+                    layers={layers}
+                    selectionIds={selectionIds}
+                    onSelectionChange={setSelection}
+                    interactionState={interactionState}
+                    setInteractionState={setInteractionState}
+                    onAddObject={handleAddObject}
+                    onDeleteObject={handleDeleteObject}
+                    onUpdateObject={handleUpdateObject}
+                    onBatchUpdateObjects={handleBatchUpdateObjects}
+                    signatureDataUrl={signatureDataUrl}
+                    onRequestSignature={() => setShowSignaturePad(true)}
+                    onCropApply={handleCropApply}
+                    onCropCancel={() => setActiveTool('select')}
+                    onDropFile={loadFile}
+                    watermarkText={watermarkText}
+                    imagePlacement={imagePlacement}
+                    onImagePlaced={handleImagePlaced}
+                    onImagePlacementCancel={handleImagePlacementCancel}
+                    toolDefaults={toolDefaults}
+                    pdfjsReady={pdfjsReady}
+                  />
                 </div>
               </div>
               {renderDoc && (
                 <div className="canvas-page-pill">
-                  <span>Page {currentPage} / {numPages}</span>
+                  <button onClick={() => setCurrentPageAndScroll(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
+                  <span>{currentPage} / {numPages}</span>
+                  <button onClick={() => setCurrentPageAndScroll(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
                 </div>
               )}
             </div>
