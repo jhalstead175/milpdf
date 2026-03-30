@@ -10,16 +10,30 @@ html.editor-active #root {
 }
 
 .app {
+  --app-accent: #34d399;
+  --app-accent-strong: #6ee7b7;
+  --app-accent-soft: rgba(52, 211, 153, 0.12);
+  --app-accent-muted: rgba(52, 211, 153, 0.08);
+  --app-accent-border: rgba(52, 211, 153, 0.45);
+  --app-accent-border-strong: rgba(52, 211, 153, 0.55);
+  --app-accent-glow: rgba(52, 211, 153, 0.18);
+  --app-accent-glow-strong: rgba(52, 211, 153, 0.22);
+  --app-accent-line: rgba(52, 211, 153, 0.4);
+  --app-text: #d1fae5;
+  --app-text-dim: rgba(209, 250, 229, 0.82);
+  --app-text-muted: rgba(209, 250, 229, 0.74);
+  --app-text-faint: rgba(209, 250, 229, 0.58);
+  --app-text-subtle: rgba(209, 250, 229, 0.45);
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100%;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(201, 168, 76, 0.08), transparent 32%),
-    radial-gradient(circle at top right, rgba(201, 168, 76, 0.05), transparent 28%),
+    radial-gradient(circle at top left, rgba(52, 211, 153, 0.08), transparent 32%),
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.05), transparent 28%),
     #0a0a0b;
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 .acrobat-topbar {
@@ -45,7 +59,7 @@ html.editor-active #root {
   padding: 0 14px;
   background: transparent;
   border: none;
-  color: rgba(242, 234, 211, 0.74);
+  color: var(--app-text-muted);
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -59,7 +73,7 @@ html.editor-active #root {
   right: 12px;
   bottom: 0;
   height: 2px;
-  background: #c9a84c;
+  background: var(--app-accent);
   transform: scaleX(0);
   transform-origin: center;
   transition: transform 0.2s ease;
@@ -67,7 +81,7 @@ html.editor-active #root {
 
 .acrobat-tab:hover,
 .acrobat-tab.active {
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 .acrobat-tab.active::after {
@@ -87,7 +101,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 999px;
   background: rgba(10, 10, 11, 0.72);
-  color: rgba(242, 234, 211, 0.86);
+  color: var(--app-text-dim);
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
@@ -110,7 +124,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 999px;
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -118,7 +132,7 @@ html.editor-active #root {
   min-width: 44px;
   text-align: center;
   font-size: 11px;
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 .main-content {
@@ -155,7 +169,7 @@ html.editor-active #root {
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
-  color: #f2ead3;
+  color: var(--app-text);
   cursor: pointer;
   font-size: 14px;
   transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -163,11 +177,11 @@ html.editor-active #root {
 
 .tool-rail-button:hover {
   border-color: #1e2530;
-  background: rgba(201, 168, 76, 0.08);
+  background: var(--app-accent-muted);
 }
 
 .tool-rail-button.active {
-  background: #c9a84c;
+  background: var(--app-accent);
   color: #0a0a0b;
 }
 
@@ -199,7 +213,7 @@ html.editor-active #root {
   justify-content: space-between;
   padding: 0 10px 0 14px;
   border-bottom: 1px solid #1e2530;
-  color: #c9a84c;
+  color: var(--app-accent);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -208,7 +222,7 @@ html.editor-active #root {
 .context-panel-header button {
   border: none;
   background: transparent;
-  color: #f2ead3;
+  color: var(--app-text);
   cursor: pointer;
   font-size: 13px;
 }
@@ -223,8 +237,8 @@ html.editor-active #root {
 }
 
 .context-panel-collapse:hover {
-  background: rgba(201, 168, 76, 0.12);
-  color: #c9a84c;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
 }
 
 .context-panel-body {
@@ -255,7 +269,7 @@ html.editor-active #root {
 .context-card-title,
 .panel-header {
   padding: 10px 12px;
-  color: #c9a84c;
+  color: var(--app-accent);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -268,14 +282,14 @@ html.editor-active #root {
 }
 
 .context-tool-name {
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 18px;
   letter-spacing: 0.03em;
 }
 
 .context-muted,
 .panel-empty {
-  color: rgba(242, 234, 211, 0.58);
+  color: var(--app-text-faint);
   font-size: 12px;
 }
 
@@ -284,7 +298,7 @@ html.editor-active #root {
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 .context-field input[type="color"] {
@@ -298,7 +312,7 @@ html.editor-active #root {
 
 .context-field input[type="range"] {
   width: 100%;
-  accent-color: #c9a84c;
+  accent-color: var(--app-accent);
 }
 
 .context-actions {
@@ -309,7 +323,7 @@ html.editor-active #root {
 
 .context-summary {
   font-size: 12px;
-  color: rgba(242, 234, 211, 0.82);
+  color: var(--app-text-dim);
 }
 
 .panel-body {
@@ -340,8 +354,8 @@ html.editor-active #root {
 }
 
 .layer-row.selected {
-  border-color: rgba(201, 168, 76, 0.45);
-  background: rgba(201, 168, 76, 0.12);
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
 }
 
 .layer-row.is-hidden {
@@ -357,14 +371,14 @@ html.editor-active #root {
 
 .layer-type {
   font-size: 10px;
-  color: rgba(242, 234, 211, 0.45);
+  color: var(--app-text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .layer-title {
   font-size: 12px;
-  color: #f2ead3;
+  color: var(--app-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -381,14 +395,14 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 4px;
   background: transparent;
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 11px;
   cursor: pointer;
 }
 
 .layer-btn:hover {
-  border-color: rgba(201, 168, 76, 0.55);
-  color: #c9a84c;
+  border-color: var(--app-accent-border-strong);
+  color: var(--app-accent);
 }
 
 .inspector-panel .panel-body {
@@ -426,8 +440,8 @@ html.editor-active #root {
 }
 
 .ava-status.connected {
-  color: #c9a84c;
-  border-color: rgba(201, 168, 76, 0.4);
+  color: var(--app-accent);
+  border-color: var(--app-accent-line);
 }
 
 .ava-status.offline {
@@ -436,7 +450,7 @@ html.editor-active #root {
 }
 
 .ava-status.checking {
-  color: #f2ead3;
+  color: var(--app-text);
   border-color: #1e2530;
 }
 
@@ -456,7 +470,7 @@ html.editor-active #root {
 }
 
 .ava-answer {
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -465,7 +479,7 @@ html.editor-active #root {
   border-top: 1px solid #1e2530;
   padding-top: 8px;
   font-size: 11px;
-  color: rgba(242, 234, 211, 0.56);
+  color: var(--app-text-faint);
 }
 
 .ava-sources-title {
@@ -476,7 +490,7 @@ html.editor-active #root {
 }
 
 .ava-source-item {
-  color: rgba(242, 234, 211, 0.74);
+  color: var(--app-text-muted);
 }
 
 .annotation-list {
@@ -492,8 +506,8 @@ html.editor-active #root {
 }
 
 .annotation-list-item.selected .annotation-select {
-  border-color: rgba(201, 168, 76, 0.55);
-  background: rgba(201, 168, 76, 0.1);
+  border-color: var(--app-accent-border-strong);
+  background: var(--app-accent-muted);
 }
 
 .annotation-select {
@@ -505,7 +519,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 8px;
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
   text-align: left;
   cursor: pointer;
 }
@@ -514,12 +528,12 @@ html.editor-active #root {
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: #c9a84c;
+  color: var(--app-accent);
 }
 
 .annotation-select span {
   font-size: 12px;
-  color: rgba(242, 234, 211, 0.84);
+  color: var(--app-text-dim);
 }
 
 .annotation-delete-btn {
@@ -527,7 +541,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 8px;
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -539,7 +553,7 @@ html.editor-active #root {
   min-height: 0;
   overflow: hidden;
   background:
-    radial-gradient(circle at 20% 0%, rgba(201, 168, 76, 0.08), transparent 22%),
+    radial-gradient(circle at 20% 0%, rgba(52, 211, 153, 0.08), transparent 22%),
     #0a0a0b;
 }
 
@@ -569,11 +583,11 @@ html.editor-active #root {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border: 1px solid rgba(201, 168, 76, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.14);
   border-radius: 999px;
   background: rgba(17, 19, 24, 0.78);
   backdrop-filter: blur(8px);
-  color: #f2ead3;
+  color: var(--app-text);
   z-index: 20;
 }
 
@@ -582,8 +596,8 @@ html.editor-active #root {
   height: 24px;
   border: none;
   border-radius: 999px;
-  background: rgba(201, 168, 76, 0.12);
-  color: #f2ead3;
+  background: var(--app-accent-soft);
+  color: var(--app-text);
   cursor: pointer;
 }
 
@@ -597,7 +611,7 @@ html.editor-active #root {
   padding: 8px 18px;
   border: none;
   border-radius: 8px;
-  background: #c9a84c;
+  background: var(--app-accent);
   color: #0a0a0b;
   font-size: 13px;
   font-weight: 700;
@@ -605,7 +619,7 @@ html.editor-active #root {
 }
 
 .btn-primary:hover {
-  background: #d8b65b;
+  background: var(--app-accent-strong);
 }
 
 .btn-secondary {
@@ -613,14 +627,14 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 8px;
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 12px;
   cursor: pointer;
 }
 
 .btn-secondary:hover {
-  border-color: rgba(201, 168, 76, 0.55);
-  color: #c9a84c;
+  border-color: var(--app-accent-border-strong);
+  color: var(--app-accent);
 }
 
 .btn-secondary:disabled,
@@ -908,7 +922,7 @@ html.editor-active #root {
   padding: 10px 12px;
   margin: 0;
   font-size: 12px;
-  color: #c9a84c;
+  color: var(--app-accent);
   border-bottom: 1px solid #1e2530;
   font-weight: 600;
   text-transform: uppercase;
@@ -938,17 +952,17 @@ html.editor-active #root {
 }
 
 .thumbnail-item:hover {
-  border-color: rgba(201, 168, 76, 0.45);
+  border-color: var(--app-accent-border);
   transform: translateY(-1px);
 }
 
 .thumbnail-item.active {
-  border-color: #c9a84c;
-  box-shadow: 0 0 0 1px rgba(201, 168, 76, 0.18);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 1px var(--app-accent-glow);
 }
 
 .thumbnail-item.drag-over {
-  border-color: #c9a84c;
+  border-color: var(--app-accent);
   border-style: dashed;
 }
 
@@ -985,7 +999,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 999px;
   background: rgba(10, 10, 11, 0.88);
-  color: #f2ead3;
+  color: var(--app-text);
   cursor: pointer;
   z-index: 2;
 }
@@ -995,7 +1009,7 @@ html.editor-active #root {
   bottom: 4px;
   right: 4px;
   background: rgba(10, 10, 11, 0.8);
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 4px;
@@ -1052,11 +1066,11 @@ html.editor-active #root {
 
 .empty-message {
   text-align: center;
-  color: rgba(242, 234, 211, 0.62);
+  color: rgba(209, 250, 229, 0.62);
 }
 
 .empty-icon {
-  color: #c9a84c;
+  color: var(--app-accent);
   display: block;
   margin: 0 auto 16px;
 }
@@ -1065,7 +1079,7 @@ html.editor-active #root {
   font-size: 20px;
   font-weight: 500;
   margin: 0 0 8px;
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 .empty-message p {
@@ -1427,18 +1441,18 @@ html.editor-active #root {
 }
 
 .crop-actions button:first-child {
-  background: #c9a84c;
+  background: var(--app-accent);
   color: #0a0a0b;
 }
 
 .crop-actions button:last-child {
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
 }
 
 /* ===== Signature Modal Icons ===== */
 .modal-actions svg {
-  color: #c9a84c;
+  color: var(--app-accent);
   vertical-align: middle;
 }
 
@@ -1462,19 +1476,19 @@ html.editor-active #root {
   border-radius: 12px;
   padding: 24px;
   max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(201, 168, 76, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--app-accent-muted);
 }
 
 .modal h3 {
   margin: 0 0 4px;
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 18px;
   font-weight: 600;
 }
 
 .modal-hint {
   margin: 0 0 16px;
-  color: rgba(242, 234, 211, 0.56);
+  color: var(--app-text-faint);
   font-size: 13px;
 }
 
@@ -1507,18 +1521,18 @@ html.editor-active #root {
   padding: 8px 18px;
   border: none;
   border-radius: 6px;
-  background: #c9a84c;
+  background: var(--app-accent);
   color: #0a0a0b;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 0 12px rgba(201, 168, 76, 0.18);
+  box-shadow: 0 0 12px var(--app-accent-glow);
 }
 
 .btn-primary:hover {
-  background: #d8b65b;
-  box-shadow: 0 0 20px rgba(201, 168, 76, 0.22);
+  background: var(--app-accent-strong);
+  box-shadow: 0 0 20px var(--app-accent-glow-strong);
   transform: translateY(-1px);
 }
 
@@ -1532,7 +1546,7 @@ html.editor-active #root {
   border: 1px solid #1e2530;
   border-radius: 6px;
   background: #111318;
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1540,8 +1554,8 @@ html.editor-active #root {
 
 .btn-secondary:hover {
   background: #111318;
-  border-color: rgba(201, 168, 76, 0.45);
-  color: #c9a84c;
+  border-color: var(--app-accent-border);
+  color: var(--app-accent);
 }
 
 /* ===== Loading Overlay ===== */
@@ -1562,10 +1576,10 @@ html.editor-active #root {
   width: 40px;
   height: 40px;
   border: 3px solid #1e2530;
-  border-top-color: #c9a84c;
+  border-top-color: var(--app-accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  box-shadow: 0 0 16px rgba(201, 168, 76, 0.18);
+  box-shadow: 0 0 16px var(--app-accent-glow);
 }
 
 @keyframes spin {
@@ -2076,7 +2090,7 @@ html.editor-active #root {
   display: flex;
   flex-direction: column;
   font-size: 12px;
-  color: #f2ead3;
+  color: var(--app-text);
   gap: 4px;
 }
 
@@ -2085,21 +2099,21 @@ html.editor-active #root {
   border-radius: 6px;
   border: 1px solid #1e2530;
   background: #0a0a0b;
-  color: #f2ead3;
+  color: var(--app-text);
   font-size: 13px;
   transition: border-color 0.2s;
 }
 
 .profile-grid input:focus {
-  border-color: #c9a84c;
+  border-color: var(--app-accent);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.14);
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.14);
 }
 
 /* ===== Selection Box + Resize Handles (MilPDF 2.0) ===== */
 .selection-box {
   position: absolute;
-  border: 2px solid #c9a84c;
+  border: 2px solid var(--app-accent);
   pointer-events: none;
   box-sizing: border-box;
   border-radius: 2px;
@@ -2110,7 +2124,7 @@ html.editor-active #root {
   width: 10px;
   height: 10px;
   background: #fff;
-  border: 2px solid #c9a84c;
+  border: 2px solid var(--app-accent);
   border-radius: 2px;
   box-sizing: border-box;
   cursor: nwse-resize;

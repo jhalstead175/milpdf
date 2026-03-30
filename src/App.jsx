@@ -249,7 +249,7 @@ function App() {
       fontFamily: 'Helvetica',
     },
     highlight: {
-      color: '#c9a84c',
+      color: '#34d399',
       opacity: 0.35,
     },
     draw: {
