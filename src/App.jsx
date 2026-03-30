@@ -631,10 +631,6 @@ const currentPageObjects = useMemo(
 () => currentPageMeta?.objects || [],
  [currentPageMeta]
 );
-const activeFormProfile = useMemo(
- () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
- [formProfileKey]
-);
 const runDD214Analysis = useCallback(async () => {
     if (!renderDoc) return;
     setLoading(true);
@@ -900,23 +896,6 @@ const runDD214Analysis = useCallback(async () => {
     setSelection(prev => prev.filter(id => objects.some(o => o.id === id)));
   }, [objects, setSelection]);
 
-  const selectedSet = useMemo(() => new Set(selectionIds), [selectionIds]);
-  const selectedObjects = useMemo(
-    () => objects.filter(o => selectedSet.has(o.id)),
-    [objects, selectedSet]
-  );
-  const currentPageMeta = useMemo(
-    () => pages[currentPage - 1] || null,
-    [pages, currentPage]
-  );
-  const currentPageObjects = useMemo(
-    () => currentPageMeta?.objects || [],
-    [currentPageMeta]
-  );
-  const activeFormProfile = useMemo(
-    () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
-    [formProfileKey]
-  );
   const handleCopy = useCallback(() => {
     copyObjects(objects, selectedSet);
   }, [objects, selectedSet]);
