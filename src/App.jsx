@@ -238,6 +238,10 @@ function App() {
   const insertFileRef = useRef(null);
   const imageInputRef = useRef(null);
   const jsonInputRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const pageSectionRefs = useRef(new Map());
+  const scrollSyncTimeoutRef = useRef(null);
+  const isScrollSyncingRef = useRef(false);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
   const [imagePlacement, setImagePlacement] = useState(null);
@@ -459,6 +463,12 @@ function App() {
     insertFileRef.current?.click();
   }, []);
 
+  const handleInsertPdf = useCallback(() => {
+    if (!pdfDoc) return;
+    setInsertPosition('after');
+    insertFileRef.current?.click();
+  }, [pdfDoc]);
+
   const handleInsertFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file || !pdfDoc) return;
@@ -634,6 +644,14 @@ const currentPageMeta = useMemo(
 const currentPageObjects = useMemo(
 () => currentPageMeta?.objects || [],
  [currentPageMeta]
+);
+const pageEntries = useMemo(
+() => pages.map((page) => ({
+  pageNumber: page.number,
+  pageId: page.id ?? null,
+  pageObjects: page.objects || [],
+})),
+[pages]
 );
 const runDD214Analysis = useCallback(async () => {
     if (!renderDoc) return;
@@ -959,9 +977,59 @@ const runDD214Analysis = useCallback(async () => {
     setActiveTool(tool);
   }, [signatureDataUrl, setActiveTool]);
 
-  const setCurrentPageAndScroll = useCallback((page) => {
-    setCurrentPage(page);
+  const registerPageSection = useCallback((pageNumber, node) => {
+    if (node) pageSectionRefs.current.set(pageNumber, node);
+    else pageSectionRefs.current.delete(pageNumber);
   }, []);
+
+  const setCurrentPageAndScroll = useCallback((page, options = {}) => {
+    const behavior = options.behavior ?? 'smooth';
+    const clampedPage = Math.min(Math.max(page, 1), Math.max(numPages, 1));
+    setCurrentPage(clampedPage);
+    const section = pageSectionRefs.current.get(clampedPage);
+    if (!section) return;
+    isScrollSyncingRef.current = true;
+    if (scrollSyncTimeoutRef.current) window.clearTimeout(scrollSyncTimeoutRef.current);
+    section.scrollIntoView({ behavior, block: 'start' });
+    scrollSyncTimeoutRef.current = window.setTimeout(() => {
+      isScrollSyncingRef.current = false;
+    }, behavior === 'smooth' ? 350 : 0);
+  }, [numPages]);
+
+  useEffect(() => () => {
+    if (scrollSyncTimeoutRef.current) window.clearTimeout(scrollSyncTimeoutRef.current);
+  }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !renderDoc) return;
+
+    const updateCurrentPageFromScroll = () => {
+      if (isScrollSyncingRef.current) return;
+      const viewportCenter = container.scrollTop + container.clientHeight / 2;
+      let nextPage = currentPage;
+      let smallestDistance = Number.POSITIVE_INFINITY;
+
+      pageSectionRefs.current.forEach((node, pageNumber) => {
+        const pageCenter = node.offsetTop + node.offsetHeight / 2;
+        const distance = Math.abs(pageCenter - viewportCenter);
+        if (distance < smallestDistance) {
+          smallestDistance = distance;
+          nextPage = pageNumber;
+        }
+      });
+
+      if (nextPage !== currentPage) setCurrentPage(nextPage);
+    };
+
+    updateCurrentPageFromScroll();
+    container.addEventListener('scroll', updateCurrentPageFromScroll, { passive: true });
+    window.addEventListener('resize', updateCurrentPageFromScroll);
+    return () => {
+      container.removeEventListener('scroll', updateCurrentPageFromScroll);
+      window.removeEventListener('resize', updateCurrentPageFromScroll);
+    };
+  }, [currentPage, renderDoc]);
 
   const togglePanelTab = useCallback((tab) => {
     setPanelTab(prev => (prev === tab ? null : tab));
@@ -1361,6 +1429,7 @@ const runDD214Analysis = useCallback(async () => {
                       <div className="context-card-title">Document Actions</div>
                       <div className="context-actions">
                         <button className="btn-secondary" onClick={handleOpen} disabled={!pdfjsReady}>Open</button>
+                        <button className="btn-secondary" onClick={handleInsertPdf} disabled={!renderDoc || !pdfjsReady}>Insert PDF</button>
                         <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc || !pdfjsReady}>Save</button>
                         <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc || !pdfjsReady}>Save As</button>
                         <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc || !pdfjsReady}>Print</button>
@@ -1441,7 +1510,8 @@ const runDD214Analysis = useCallback(async () => {
                     <div className="context-card">
                       <div className="context-card-title">Page Actions</div>
                       <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleAddBlank} disabled={!renderDoc}>Insert Blank</button>
+                        <button className="btn-secondary" onClick={handleAddBlank} disabled={!renderDoc}>Insert Page</button>
+                        <button className="btn-secondary" onClick={handleInsertPdf} disabled={!renderDoc}>Insert PDF</button>
                         <button className="btn-secondary" onClick={() => handleRotate(90)} disabled={!renderDoc}>Rotate 90</button>
                         <button className="btn-secondary" onClick={handleDeletePage} disabled={!renderDoc || numPages <= 1}>Delete Current</button>
                         <button className="btn-secondary" onClick={handleSplit} disabled={!renderDoc || numPages <= 1}>Split / Extract</button>
@@ -1490,44 +1560,56 @@ const runDD214Analysis = useCallback(async () => {
             </div>
 
             <div className="canvas-stage">
-              <div className="canvas-scroll-container">
+              <div ref={scrollContainerRef} className="canvas-scroll-container">
                 <div className="canvas-stage-inner">
-                  <PDFViewer
-                    renderDoc={renderDoc}
-                    currentPage={currentPage}
-                    zoom={zoom}
-                    activeTool={activeTool}
-                    objects={objects}
-                    pageObjects={currentPageObjects}
-                    currentPageId={currentPageMeta?.id || null}
-                    layers={layers}
-                    selectionIds={selectionIds}
-                    onSelectionChange={setSelection}
-                    interactionState={interactionState}
-                    setInteractionState={setInteractionState}
-                    onAddObject={handleAddObject}
-                    onDeleteObject={handleDeleteObject}
-                    onUpdateObject={handleUpdateObject}
-                    onBatchUpdateObjects={handleBatchUpdateObjects}
-                    signatureDataUrl={signatureDataUrl}
-                    onRequestSignature={() => setShowSignaturePad(true)}
-                    onCropApply={handleCropApply}
-                    onCropCancel={() => setActiveTool('select')}
-                    onDropFile={loadFile}
-                    watermarkText={watermarkText}
-                    imagePlacement={imagePlacement}
-                    onImagePlaced={handleImagePlaced}
-                    onImagePlacementCancel={handleImagePlacementCancel}
-                    toolDefaults={toolDefaults}
-                    pdfjsReady={pdfjsReady}
-                  />
+                  {pageEntries.map(({ pageNumber, pageId, pageObjects }) => {
+                    const isActivePage = pageNumber === currentPage;
+                    return (
+                      <div
+                        key={pageId || pageNumber}
+                        ref={(node) => registerPageSection(pageNumber, node)}
+                        className="page-section"
+                        onMouseDown={() => {
+                          if (!isActivePage) setCurrentPage(pageNumber);
+                        }}
+                      >
+                        <PDFViewer
+                          renderDoc={renderDoc}
+                          currentPage={pageNumber}
+                          zoom={zoom}
+                          activeTool={isActivePage ? activeTool : 'select'}
+                          objects={objects}
+                          pageObjects={pageObjects}
+                          currentPageId={pageId}
+                          layers={layers}
+                          selectionIds={isActivePage ? selectionIds : []}
+                          onSelectionChange={isActivePage ? setSelection : undefined}
+                          interactionState={isActivePage ? interactionState : createInteractionState()}
+                          setInteractionState={isActivePage ? setInteractionState : undefined}
+                          onAddObject={isActivePage ? handleAddObject : undefined}
+                          onDeleteObject={isActivePage ? handleDeleteObject : undefined}
+                          onUpdateObject={isActivePage ? handleUpdateObject : undefined}
+                          onBatchUpdateObjects={isActivePage ? handleBatchUpdateObjects : undefined}
+                          signatureDataUrl={signatureDataUrl}
+                          onRequestSignature={() => setShowSignaturePad(true)}
+                          onCropApply={isActivePage ? handleCropApply : undefined}
+                          onCropCancel={() => setActiveTool('select')}
+                          onDropFile={loadFile}
+                          watermarkText={watermarkText}
+                          imagePlacement={isActivePage ? imagePlacement : null}
+                          onImagePlaced={isActivePage ? handleImagePlaced : undefined}
+                          onImagePlacementCancel={isActivePage ? handleImagePlacementCancel : undefined}
+                          toolDefaults={toolDefaults}
+                          pdfjsReady={pdfjsReady}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               {renderDoc && (
                 <div className="canvas-page-pill">
-                  <button onClick={() => setCurrentPageAndScroll(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
-                  <span>{currentPage} / {numPages}</span>
-                  <button onClick={() => setCurrentPageAndScroll(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
+                  <span>Page {currentPage} / {numPages}</span>
                 </div>
               )}
             </div>
