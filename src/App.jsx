@@ -1259,22 +1259,6 @@ const runDD214Analysis = useCallback(async () => {
         </div>
       </div>
 
-      {activeFormProfile && (
-        <div className="form-profile-banner">
-          <div>
-            Detected {activeFormProfile.name}. Auto-fill from saved profile?
-          </div>
-          <div className="form-profile-actions">
-            <button className="btn-secondary" onClick={() => setShowProfileModal(true)}>
-              Edit Profile
-            </button>
-            <button className="btn-primary" onClick={handleAutoFill}>
-              Auto-fill Fields
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="main-content">
         {showV3 ? (
           <V3AppShell />
@@ -1301,7 +1285,14 @@ const runDD214Analysis = useCallback(async () => {
             <div className={`context-panel ${panelTab ? 'open' : ''}`}>
               <div className="context-panel-header">
                 <span>{panelTab ? panelTab.toUpperCase() : ''}</span>
-                <button onClick={() => setPanelTab(null)} title="Collapse panel">&lt;</button>
+                <button
+                  className="context-panel-collapse"
+                  onClick={() => setPanelTab(null)}
+                  title="Collapse panel"
+                  aria-label="Collapse panel"
+                >
+                  ◀
+                </button>
               </div>
               <div className="context-panel-body">
                 {panelTab === 'tools' && (
@@ -1351,6 +1342,21 @@ const runDD214Analysis = useCallback(async () => {
                         })
                       )}
                     </div>
+                    {activeFormProfile && (
+                      <div className="context-card">
+                        <div className="context-card-title">Detected Form</div>
+                        <div className="context-tool-name">{activeFormProfile.name}</div>
+                        <div className="context-summary">Auto-fill available from the saved veteran profile.</div>
+                        <div className="context-actions">
+                          <button className="btn-secondary" onClick={() => setShowProfileModal(true)}>
+                            Edit Profile
+                          </button>
+                          <button className="btn-primary" onClick={handleAutoFill}>
+                            Auto-fill
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="context-card">
                       <div className="context-card-title">Document Actions</div>
                       <div className="context-actions">

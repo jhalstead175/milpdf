@@ -213,6 +213,20 @@ html.editor-active #root {
   font-size: 13px;
 }
 
+.context-panel-collapse {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.context-panel-collapse:hover {
+  background: rgba(201, 168, 76, 0.12);
+  color: #c9a84c;
+}
+
 .context-panel-body {
   flex: 1;
   min-height: 0;
@@ -2080,29 +2094,6 @@ html.editor-active #root {
   border-color: #c9a84c;
   outline: none;
   box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.14);
-}
-
-/* ===== Form Profile Banner ===== */
-.form-profile-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  background: rgba(201, 168, 76, 0.12);
-  border-bottom: 1px solid #1e2530;
-  color: #f2ead3;
-  font-size: 13px;
-}
-
-.form-profile-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.form-profile-actions .btn {
-  font-size: 12px;
-  padding: 4px 10px;
 }
 
 /* ===== Selection Box + Resize Handles (MilPDF 2.0) ===== */
