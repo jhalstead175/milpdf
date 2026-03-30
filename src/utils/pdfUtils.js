@@ -43,13 +43,17 @@ export const structuralOps = {
 
 export async function renderPageToCanvas(renderDoc, pageNum, canvas, scale = 1.0) {
   const page = await renderDoc.getPage(pageNum);
-  const viewport = page.getViewport({ scale });
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return { width: viewport.width, height: viewport.height };
+  try {
+    const viewport = page.getViewport({ scale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return { width: viewport.width, height: viewport.height };
+  } finally {
+    page.cleanup?.();
+  }
 }
 
 export async function deletePage(pdfDoc, pageIndex) {

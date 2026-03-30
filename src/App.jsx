@@ -3,7 +3,7 @@ import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
 import V3AppShell from './app/AppShell';
 import PageThumbnails from './components/PageThumbnails';
-import MultiPageScroller from './components/MultiPageScroller';
+import PDFViewer from './components/PDFViewer';
 import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
 import ProfileModal from './components/ProfileModal';
@@ -19,7 +19,7 @@ import {
   addBlankPage, mergePdf, insertPdf, cropPage,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
-import { embedEditorObjects, secureEmbed } from './core/export';
+import { secureEmbed } from './core/export';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -45,13 +45,39 @@ import './App.css';
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
 const SHELL_TABS = ['tools', 'annotate', 'pages', 'export'];
 const TOOL_RAIL_ITEMS = [
-  { id: 'select', glyph: 'S', label: 'Select' },
-  { id: 'highlight', glyph: 'H', label: 'Highlight' },
-  { id: 'draw', glyph: 'D', label: 'Draw' },
+  { id: 'select', glyph: '↖', label: 'Select' },
+  { id: 'highlight', glyph: '▬', label: 'Highlight' },
+  { id: 'draw', glyph: '✏', label: 'Draw' },
   { id: 'text', glyph: 'T', label: 'Text' },
-  { id: 'note', glyph: 'N', label: 'Note' },
-  { id: 'eraser', glyph: 'E', label: 'Eraser' },
+  { id: 'note', glyph: '📌', label: 'Note' },
+  { id: 'eraser', glyph: '⌫', label: 'Eraser' },
 ];
+
+let pageMetaSeed = 0;
+
+function nextPageMetaId() {
+  pageMetaSeed += 1;
+  return `page-meta-${pageMetaSeed}`;
+}
+
+function buildPageMetaFromDoc(doc, pageIds = []) {
+  return doc.getPages().map((page, index) => ({
+    id: pageIds[index] ?? nextPageMetaId(),
+    number: index + 1,
+    width: page.getWidth(),
+    height: page.getHeight(),
+    rotation: page.getRotation().angle || 0,
+  }));
+}
+
+function attachPageIds(objects, pageMeta) {
+  const pageIdByNumber = new Map(pageMeta.map((meta) => [meta.number, meta.id]));
+  return objects.map((obj) => {
+    if (obj.pageId) return obj;
+    const nextPageId = pageIdByNumber.get(obj.page);
+    return nextPageId ? { ...obj, pageId: nextPageId } : obj;
+  });
+}
 
 function getActiveToolLabel(tool) {
   if (tool === 'highlight') return 'Highlight';
@@ -90,6 +116,7 @@ function App() {
   const [showV3, setShowV3] = useState(false);
   const kernel = useMemo(() => createKernel(), []);
   const [toasts, setToasts] = useState([]);
+  const [pdfjsReady, setPdfjsReady] = useState(false);
 
   useEffect(() => {
     if (isElectron) setView('editor');
@@ -98,6 +125,16 @@ function App() {
   useEffect(() => {
     kernel.init(CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG);
   }, [kernel]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) setPdfjsReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pushToast = useCallback((toast) => {
     setToasts(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, ...toast }]);
@@ -145,13 +182,14 @@ function App() {
   const [renderDoc, setRenderDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const scrollerRef = useRef(null);
+  const renderDocRef = useRef(null);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [healthReport, setHealthReport] = useState(null);
   const editorStore = useEditorStore([]);
   const {
     objects,
     pages,
+    pageMeta,
     selection,
     zoom,
     setZoom,
@@ -170,8 +208,6 @@ function App() {
     commitHistory,
     undo,
     redo,
-    canUndo,
-    canRedo,
   } = editorStore;
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
@@ -226,40 +262,59 @@ function App() {
     },
   });
 
-  const buildPageMeta = useCallback((doc) => (
-    doc.getPages().map((page, index) => ({
-      id: `page-${index + 1}`,
-      number: index + 1,
-      width: page.getWidth(),
-      height: page.getHeight(),
-      rotation: page.getRotation().angle || 0,
-    }))
-  ), []);
+  useEffect(() => {
+    const previousDoc = renderDocRef.current;
+    renderDocRef.current = renderDoc;
+    if (previousDoc && previousDoc !== renderDoc) {
+      try {
+        previousDoc.destroy?.();
+      } catch (err) {
+        console.warn('Failed to destroy previous PDF.js document:', err);
+      }
+    }
+  }, [renderDoc]);
 
-  const updateFromResult = useCallback((result) => {
+  useEffect(() => () => {
+    if (renderDocRef.current) {
+      try {
+        renderDocRef.current.destroy?.();
+      } catch (err) {
+        console.warn('Failed to destroy PDF.js document during cleanup:', err);
+      }
+      renderDocRef.current = null;
+    }
+  }, []);
+
+  const updateFromResult = useCallback((result, options = {}) => {
+    const nextPageMeta = buildPageMetaFromDoc(
+      result.pdfDoc,
+      options.pageIds ?? pageMeta.map((meta) => meta.id)
+    );
     setPdfDoc(result.pdfDoc);
     setPdfBytes(result.bytes);
     setRenderDoc(result.renderDoc);
     setNumPages(result.pdfDoc.getPageCount());
-    setPageMeta(buildPageMeta(result.pdfDoc));
+    setPageMeta(nextPageMeta);
     kernel.eventBus.emit('document:loaded', {
       pages: result.pdfDoc.getPageCount(),
     });
-  }, [buildPageMeta, setPageMeta, kernel]);
+    return nextPageMeta;
+  }, [pageMeta, setPageMeta, kernel]);
 
   // --- Load a PDF from ArrayBuffer + name ---
   const loadFromBuffer = useCallback(async (buffer, name) => {
+    if (!pdfjsReady) return;
     setLoading(true);
     try {
       const result = await loadPdf(buffer);
-      updateFromResult(result);
+      const nextPageMeta = updateFromResult(result, { pageIds: [] });
       setFileName(name);
       setCurrentPage(1);
-      const formFields = await Promise.all(
+      const formFields = attachPageIds(await Promise.all(
         Array.from({ length: result.pdfDoc.getPageCount() }, (_, i) =>
           detectFormFields(result.renderDoc, i + 1)
         )
-      ).then(pages => pages.flat());
+      ).then(pages => pages.flat()), nextPageMeta);
       resetObjects(formFields);
       setSelection([]);
       const fieldNames = formFields.map(f => f.fieldName).filter(Boolean);
@@ -270,7 +325,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [updateFromResult, resetObjects, setSelection, setActiveTool]);
+  }, [pdfjsReady, updateFromResult, resetObjects, setSelection, setActiveTool]);
 
   // --- Load a PDF from File object (browser drag-drop / input) ---
   const loadFile = useCallback(async (file) => {
@@ -280,6 +335,7 @@ function App() {
 
   // --- File operations ---
   const handleOpen = useCallback(async () => {
+    if (!pdfjsReady) return;
     if (isElectron) {
       const fileInfo = await window.electronAPI.openFileDialog();
       if (!fileInfo) return;
@@ -288,7 +344,7 @@ function App() {
     } else {
       fileInputRef.current?.click();
     }
-  }, [loadFromBuffer]);
+  }, [pdfjsReady, loadFromBuffer]);
 
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -382,14 +438,16 @@ function App() {
       // position: 'before' = insert before currentPage, 'after' = insert after currentPage
       const atIndex = position === 'before' ? currentPage - 1 : currentPage;
       const result = await addBlankPage(pdfDoc, atIndex);
-      updateFromResult(result);
+      const nextPageIds = pageMeta.map((meta) => meta.id);
+      nextPageIds.splice(atIndex, 0, nextPageMetaId());
+      updateFromResult(result, { pageIds: nextPageIds });
       setCurrentPage(atIndex + 1);
     } catch (err) {
       alert('Failed to insert page: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, currentPage, updateFromResult]);
+  }, [pdfDoc, currentPage, pageMeta, updateFromResult]);
 
   const handleInsertFromPdf = useCallback((position) => {
     setInsertPosition(position);
@@ -405,7 +463,11 @@ function App() {
       const buf = await file.arrayBuffer();
       const atIndex = insertPosition === 'before' ? currentPage - 1 : currentPage;
       const result = await insertPdf(pdfDoc, buf, atIndex);
-      updateFromResult(result);
+      const insertedCount = result.pdfDoc.getPageCount() - pageMeta.length;
+      const nextPageIds = pageMeta.map((meta) => meta.id);
+      const insertedIds = Array.from({ length: insertedCount }, () => nextPageMetaId());
+      nextPageIds.splice(atIndex, 0, ...insertedIds);
+      updateFromResult(result, { pageIds: nextPageIds });
       setCurrentPage(atIndex + 1);
     } catch (err) {
       alert('Failed to insert PDF: ' + err.message);
@@ -413,15 +475,19 @@ function App() {
       setLoading(false);
       e.target.value = '';
     }
-  }, [pdfDoc, currentPage, insertPosition, updateFromResult]);
+  }, [pdfDoc, currentPage, insertPosition, pageMeta, updateFromResult]);
 
   const handleDeletePageAt = useCallback(async (pageNumber) => {
     if (!pdfDoc || numPages <= 1) return;
     if (!confirm(`Delete page ${pageNumber}?`)) return;
     setLoading(true);
     try {
+      const removedPageMeta = pageMeta[pageNumber - 1];
       const result = await deletePage(pdfDoc, pageNumber - 1);
-      updateFromResult(result);
+      const nextPageIds = pageMeta
+        .filter((_, index) => index !== pageNumber - 1)
+        .map((meta) => meta.id);
+      updateFromResult(result, { pageIds: nextPageIds });
       setCurrentPage(prev => {
         if (prev > result.pdfDoc.getPageCount()) return result.pdfDoc.getPageCount();
         if (prev === pageNumber) return Math.min(pageNumber, result.pdfDoc.getPageCount());
@@ -429,15 +495,22 @@ function App() {
       });
       commitHistory(prev =>
         prev
-          .filter(a => a.page !== pageNumber)
-          .map(a => a.page > pageNumber ? { ...a, page: a.page - 1 } : a)
+          .filter((annotation) => {
+            if (removedPageMeta?.id && annotation.pageId) return annotation.pageId !== removedPageMeta.id;
+            return annotation.page !== pageNumber;
+          })
+          .map((annotation) => (
+            annotation.pageId || annotation.page <= pageNumber
+              ? annotation
+              : { ...annotation, page: annotation.page - 1 }
+          ))
       );
     } catch (err) {
       alert('Failed to delete page: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfDoc, numPages, updateFromResult, commitHistory]);
+  }, [pdfDoc, numPages, pageMeta, updateFromResult, commitHistory]);
 
   const handleDeletePage = useCallback(async () => {
     await handleDeletePageAt(currentPage);
@@ -464,19 +537,15 @@ function App() {
       const [moved] = order.splice(fromIndex, 1);
       order.splice(toIndex, 0, moved);
       const result = await reorderPages(pdfBytes, order);
-      updateFromResult(result);
+      const nextPageIds = order.map((pageIndex) => pageMeta[pageIndex]?.id).filter(Boolean);
+      updateFromResult(result, { pageIds: nextPageIds });
       setCurrentPage(toIndex + 1);
-      commitHistory(prev => prev.map(a => {
-        const oldPageIndex = a.page - 1;
-        const newPos = order.indexOf(oldPageIndex);
-        return { ...a, page: newPos + 1 };
-      }));
     } catch (err) {
       alert('Failed to reorder pages: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, numPages, updateFromResult, commitHistory]);
+  }, [pdfBytes, numPages, pageMeta, updateFromResult]);
 
   // --- Watermark ---
   const handleWatermark = useCallback(() => {
@@ -593,24 +662,30 @@ const runDD214Analysis = useCallback(async () => {
 
   // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
   const handleAddObject = useCallback((obj) => {
-    addObject(obj);
-    kernel.eventBus.emit('annotation:created', { object: obj });
-    if (obj?.type === 'evidenceMarker') {
-      kernel.eventBus.emit('evidence:created', { object: obj });
-      if (obj.timestamp) kernel.eventBus.emit('timeline:updated', { object: obj });
+    const nextObject = obj.pageId || !currentPageMeta?.id ? obj : { ...obj, pageId: currentPageMeta.id };
+    addObject(nextObject);
+    kernel.eventBus.emit('annotation:created', { object: nextObject });
+    if (nextObject?.type === 'evidenceMarker') {
+      kernel.eventBus.emit('evidence:created', { object: nextObject });
+      if (nextObject.timestamp) kernel.eventBus.emit('timeline:updated', { object: nextObject });
     }
-  }, [addObject, kernel]);
+  }, [addObject, currentPageMeta, kernel]);
 
   const handleAddObjects = useCallback((newObjects) => {
-    addObjects(newObjects);
-    newObjects.forEach(obj => {
+    const normalizedObjects = newObjects.map((obj) => (
+      obj.pageId || !currentPageMeta?.id || obj.page !== currentPage
+        ? obj
+        : { ...obj, pageId: currentPageMeta.id }
+    ));
+    addObjects(normalizedObjects);
+    normalizedObjects.forEach(obj => {
       kernel.eventBus.emit('annotation:created', { object: obj });
       if (obj?.type === 'evidenceMarker') {
         kernel.eventBus.emit('evidence:created', { object: obj });
         if (obj.timestamp) kernel.eventBus.emit('timeline:updated', { object: obj });
       }
     });
-  }, [addObjects, kernel]);
+  }, [addObjects, currentPage, currentPageMeta, kernel]);
 
   const runAutoRedact = useCallback(async () => {
     if (!renderDoc) return;
@@ -813,9 +888,13 @@ const runDD214Analysis = useCallback(async () => {
     () => objects.filter(o => selectedSet.has(o.id)),
     [objects, selectedSet]
   );
-  const currentPageObjects = useMemo(
-    () => pages[currentPage - 1]?.objects || [],
+  const currentPageMeta = useMemo(
+    () => pages[currentPage - 1] || null,
     [pages, currentPage]
+  );
+  const currentPageObjects = useMemo(
+    () => currentPageMeta?.objects || [],
+    [currentPageMeta]
   );
   const activeFormProfile = useMemo(
     () => (formProfileKey ? FORM_PROFILES[formProfileKey] : null),
@@ -826,10 +905,14 @@ const runDD214Analysis = useCallback(async () => {
   }, [objects, selectedSet]);
 
   const handlePaste = useCallback(() => {
-    const pasted = pasteObjects(currentPage);
+    const pasted = pasteObjects(currentPage).map((obj) => ({
+      ...obj,
+      page: currentPage,
+      pageId: currentPageMeta?.id || obj.pageId,
+    }));
     handleAddObjects(pasted);
     setSelection(pasted.map(o => o.id));
-  }, [currentPage, handleAddObjects, setSelection]);
+  }, [currentPage, currentPageMeta, handleAddObjects, setSelection]);
 
   const handleDuplicate = useCallback(() => {
     const duplicated = duplicateObjects(objects, selectedSet);
@@ -878,7 +961,6 @@ const runDD214Analysis = useCallback(async () => {
 
   const setCurrentPageAndScroll = useCallback((page) => {
     setCurrentPage(page);
-    scrollerRef.current?.scrollToPage(page);
   }, []);
 
   const togglePanelTab = useCallback((tab) => {
@@ -931,16 +1013,23 @@ const runDD214Analysis = useCallback(async () => {
       if (objects.length > 0 && !confirm('Replace current annotations with the imported JSON?')) {
         return;
       }
-      resetObjects(imported);
+      const normalizedImported = attachPageIds(imported, pages);
+      resetObjects(normalizedImported);
       setSelection([]);
-      const nextPage = imported.reduce((max, item) => Math.max(max, item.page || 1), 1);
+      const nextPage = normalizedImported.reduce((max, item) => {
+        if (item.pageId) {
+          const pageIndex = pages.findIndex((page) => page.id === item.pageId);
+          return Math.max(max, pageIndex >= 0 ? pageIndex + 1 : 1);
+        }
+        return Math.max(max, item.page || 1);
+      }, 1);
       setCurrentPage(Math.min(numPages || 1, nextPage));
     } catch (err) {
       alert('Failed to import JSON: ' + err.message);
     } finally {
       e.target.value = '';
     }
-  }, [objects.length, resetObjects, setSelection, numPages]);
+  }, [objects.length, pages, resetObjects, setSelection, numPages]);
 
   const activeToolConfig = useMemo(() => {
     if (activeTool === 'highlight') {
@@ -1106,16 +1195,12 @@ const runDD214Analysis = useCallback(async () => {
 
       if (e.key === 'ArrowLeft' && !inInput && selectionIds.length === 0) {
         setCurrentPage(p => {
-          const next = Math.max(1, p - 1);
-          scrollerRef.current?.scrollToPage(next);
-          return next;
+          return Math.max(1, p - 1);
         });
       }
       else if (e.key === 'ArrowRight' && !inInput && selectionIds.length === 0) {
         setCurrentPage(p => {
-          const next = Math.min(numPages, p + 1);
-          scrollerRef.current?.scrollToPage(next);
-          return next;
+          return Math.min(numPages, p + 1);
         });
       }
       else if (e.key === 'Delete' && !inInput && renderDoc) { handleDeletePage(); }
@@ -1205,7 +1290,7 @@ const runDD214Analysis = useCallback(async () => {
                     className={`tool-rail-button ${isActive ? 'active' : ''}`}
                     onClick={() => handleRailToolClick(item.id)}
                     title={item.label}
-                    disabled={!renderDoc}
+                    disabled={!renderDoc || !pdfjsReady}
                   >
                     <span>{item.glyph}</span>
                   </button>
@@ -1222,11 +1307,11 @@ const runDD214Analysis = useCallback(async () => {
                 {panelTab === 'tools' && (
                   <>
                     {!renderDoc && (
-                      <div className="context-card">
-                        <div className="context-card-title">Open a PDF</div>
-                        <button className="btn-primary" onClick={handleOpen}>Open Document</button>
-                      </div>
-                    )}
+                        <div className="context-card">
+                          <div className="context-card-title">Open a PDF</div>
+                          <button className="btn-primary" onClick={handleOpen} disabled={!pdfjsReady}>Open Document</button>
+                        </div>
+                      )}
                     <div className="context-card">
                       <div className="context-card-title">Active Tool</div>
                       <div className="context-tool-name">{activeToolConfig.title}</div>
@@ -1269,13 +1354,13 @@ const runDD214Analysis = useCallback(async () => {
                     <div className="context-card">
                       <div className="context-card-title">Document Actions</div>
                       <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleOpen}>Open</button>
-                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc}>Save</button>
-                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc}>Save As</button>
-                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc}>Print</button>
-                        <button className="btn-secondary" onClick={handleImportImages} disabled={!renderDoc}>Import Images</button>
-                        <button className="btn-secondary" onClick={() => setShowSignaturePad(true)} disabled={!renderDoc}>Signature</button>
-                        <button className="btn-secondary" onClick={handleMerge} disabled={!renderDoc}>Merge PDF</button>
+                        <button className="btn-secondary" onClick={handleOpen} disabled={!pdfjsReady}>Open</button>
+                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc || !pdfjsReady}>Save</button>
+                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc || !pdfjsReady}>Save As</button>
+                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc || !pdfjsReady}>Print</button>
+                        <button className="btn-secondary" onClick={handleImportImages} disabled={!renderDoc || !pdfjsReady}>Import Images</button>
+                        <button className="btn-secondary" onClick={() => setShowSignaturePad(true)} disabled={!renderDoc || !pdfjsReady}>Signature</button>
+                        <button className="btn-secondary" onClick={handleMerge} disabled={!renderDoc || !pdfjsReady}>Merge PDF</button>
                         <button className="btn-secondary" onClick={() => setShowV3(prev => !prev)}>
                           {showV3 ? 'Editor Shell' : 'V3 Shell'}
                         </button>
@@ -1399,37 +1484,38 @@ const runDD214Analysis = useCallback(async () => {
             </div>
 
             <div className="canvas-stage">
-              <div className="canvas-stage-inner">
-                <MultiPageScroller
-                  ref={scrollerRef}
-                  renderDoc={renderDoc}
-                  numPages={numPages}
-                  currentPage={currentPage}
-                  zoom={zoom}
-                  onCurrentPageChange={setCurrentPage}
-                  activeTool={activeTool}
-                  objects={objects}
-                  pageObjects={currentPageObjects}
-                  layers={layers}
-                  selectionIds={selectionIds}
-                  onSelectionChange={setSelection}
-                  interactionState={interactionState}
-                  setInteractionState={setInteractionState}
-                  onAddObject={handleAddObject}
-                  onDeleteObject={handleDeleteObject}
-                  onUpdateObject={handleUpdateObject}
-                  onBatchUpdateObjects={handleBatchUpdateObjects}
-                  signatureDataUrl={signatureDataUrl}
-                  onRequestSignature={() => setShowSignaturePad(true)}
-                  onCropApply={handleCropApply}
-                  onCropCancel={() => setActiveTool('select')}
-                  onDropFile={loadFile}
-                  watermarkText={watermarkText}
-                  imagePlacement={imagePlacement}
-                  onImagePlaced={handleImagePlaced}
-                  onImagePlacementCancel={handleImagePlacementCancel}
-                  toolDefaults={toolDefaults}
-                />
+              <div className="canvas-scroll-container">
+                <div className="canvas-stage-inner">
+                  <PDFViewer
+                    renderDoc={renderDoc}
+                    currentPage={currentPage}
+                    zoom={zoom}
+                    activeTool={activeTool}
+                    objects={objects}
+                    pageObjects={currentPageObjects}
+                    currentPageId={currentPageMeta?.id || null}
+                    layers={layers}
+                    selectionIds={selectionIds}
+                    onSelectionChange={setSelection}
+                    interactionState={interactionState}
+                    setInteractionState={setInteractionState}
+                    onAddObject={handleAddObject}
+                    onDeleteObject={handleDeleteObject}
+                    onUpdateObject={handleUpdateObject}
+                    onBatchUpdateObjects={handleBatchUpdateObjects}
+                    signatureDataUrl={signatureDataUrl}
+                    onRequestSignature={() => setShowSignaturePad(true)}
+                    onCropApply={handleCropApply}
+                    onCropCancel={() => setActiveTool('select')}
+                    onDropFile={loadFile}
+                    watermarkText={watermarkText}
+                    imagePlacement={imagePlacement}
+                    onImagePlaced={handleImagePlaced}
+                    onImagePlacementCancel={handleImagePlacementCancel}
+                    toolDefaults={toolDefaults}
+                    pdfjsReady={pdfjsReady}
+                  />
+                </div>
               </div>
               {renderDoc && (
                 <div className="canvas-page-pill">
@@ -1539,6 +1625,7 @@ const runDD214Analysis = useCallback(async () => {
         type="file"
         accept=".pdf"
         style={{ display: 'none' }}
+        disabled={!pdfjsReady}
         onChange={handleFileChange}
       />
       <input

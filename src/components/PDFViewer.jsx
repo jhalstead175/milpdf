@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { FileSearch } from 'lucide-react';
-import usePageCache from '../hooks/usePageCache';
 import { useContentBlocks } from '../hooks/useContentBlocks';
 import { makeId } from '../utils/id';
 import { identityTransform, transformToCSS, transformedBounds } from '../editor/Transform';
@@ -90,7 +89,7 @@ function TextFormatBar({ fmt, onChange, fonts }) {
 }
 
 /**
- * PDFViewer — MilPDF 2.0
+ * PDFViewer - MilPDF 2.0
  *
  * Rendering: PDF.js + <canvas>
  * Objects:   EditorObjects (PDF-space coords) rendered as HTML overlays
@@ -100,6 +99,7 @@ export default function PDFViewer({
   renderDoc, currentPage, zoom, activeTool,
   objects = [],
   pageObjects = [],
+  currentPageId = null,
   layers = {},
   selectionIds = [],
   interactionState,
@@ -113,19 +113,24 @@ export default function PDFViewer({
   onImagePlaced,
   onImagePlacementCancel,
   toolDefaults = {},
+  pdfjsReady = true,
 }) {
   const canvasRef      = useRef(null);
   const containerRef   = useRef(null);
   const textAreaRef    = useRef(null);
   const textEditorRef  = useRef(null);
+  const renderTaskRef  = useRef(null);
+  const isRenderingRef = useRef(false);
+  const pendingRenderRef = useRef(false);
+  const renderKeyRef = useRef(0);
+  const lastPointerPosRef = useRef({ x: 0, y: 0 });
 
   const fontList     = useFontList();
   const contentBlocks = useContentBlocks(renderDoc, currentPage, zoom, activeTool === 'edit');
-  // Refs for gesture state — immune to stale-closure bugs between pointer events
+  // Refs for gesture state - immune to stale-closure bugs between pointer events
   const cropStartRef  = useRef(null);
   const imageStartRef = useRef(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
-  const { getPage } = usePageCache(renderDoc, zoom);
 
   const [textBoxRect, setTextBoxRect] = useState(null);
   const [textBoxStart, setTextBoxStart] = useState(null);
@@ -166,32 +171,95 @@ export default function PDFViewer({
     });
   }, [objects, onSelectionChange]);
 
-  useEffect(() => {
-    // Capture the canvas element NOW — before any await — so it stays valid even
-    // if the component unmounts while getPage() is resolving (which happens often
-    // when IntersectionObserver rapidly changes currentPage).
-    const canvas = canvasRef.current;
-    let cancelled = false;
-    if (renderDoc && canvas) {
-      getPage(currentPage).then(entry => {
-        if (!entry || cancelled) return;
-        const ctx = canvas.getContext('2d');
-        canvas.width = entry.width;
-        canvas.height = entry.height;
-        ctx.clearRect(0, 0, entry.width, entry.height);
-        ctx.drawImage(entry.bitmap, 0, 0);
-        setPageSize({ width: entry.width, height: entry.height });
-      }).catch(console.error);
+  const cancelRenderTask = useCallback(() => {
+    if (!renderTaskRef.current) return;
+    try {
+      renderTaskRef.current.cancel();
+    } catch (err) {
+      console.warn('Failed to cancel PDF render task:', err);
+    } finally {
+      renderTaskRef.current = null;
     }
-    return () => { cancelled = true; };
-  }, [renderDoc, currentPage, zoom, getPage]);
+  }, []);
+
+  const renderPage = useCallback(async () => {
+    if (!renderDoc || !canvasRef.current) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      setPageSize({ width: 0, height: 0 });
+      return;
+    }
+
+    if (isRenderingRef.current) {
+      pendingRenderRef.current = true;
+      cancelRenderTask();
+      return;
+    }
+
+    isRenderingRef.current = true;
+    const renderKey = ++renderKeyRef.current;
+    const canvas = canvasRef.current;
+    let page = null;
+
+    try {
+      page = await renderDoc.getPage(currentPage);
+      if (renderKey !== renderKeyRef.current || !canvasRef.current) return;
+
+      const viewport = page.getViewport({ scale: zoom });
+      const ctx = canvas.getContext('2d');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const task = page.render({ canvasContext: ctx, viewport });
+      renderTaskRef.current = task;
+      await task.promise;
+
+      if (renderKey !== renderKeyRef.current) return;
+      setPageSize({ width: canvas.width, height: canvas.height });
+    } catch (err) {
+      if (err?.name !== 'RenderingCancelledException') {
+        console.error(err);
+      }
+    } finally {
+      renderTaskRef.current = null;
+      try {
+        page?.cleanup?.();
+      } catch (err) {
+        console.warn('Failed to cleanup PDF page:', err);
+      }
+      isRenderingRef.current = false;
+
+      if (pendingRenderRef.current) {
+        pendingRenderRef.current = false;
+        queueMicrotask(() => {
+          void renderPage();
+        });
+      }
+    }
+  }, [cancelRenderTask, currentPage, renderDoc, zoom]);
+
+  useEffect(() => {
+    pendingRenderRef.current = false;
+    void renderPage();
+    return () => {
+      cancelRenderTask();
+    };
+  }, [renderPage, cancelRenderTask]);
 
   useEffect(() => {
     if (!renderDoc) return;
     let cancelled = false;
     renderDoc.getPage(currentPage).then(async page => {
-      const annotations = await page.getAnnotations();
-      if (!cancelled) setNativeAnnotations(annotations || []);
+      try {
+        const annotations = await page.getAnnotations();
+        if (!cancelled) setNativeAnnotations(annotations || []);
+      } finally {
+        page.cleanup?.();
+      }
     });
     return () => { cancelled = true; };
   }, [renderDoc, currentPage]);
@@ -209,7 +277,12 @@ export default function PDFViewer({
   const getCanvasPos = useCallback((e) => {
     if (!canvasRef.current) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
   }, []);
 
 
@@ -243,6 +316,7 @@ export default function PDFViewer({
     id: makeId(),
     type,
     page: currentPage,
+    pageId: currentPageId,
     pdfX: rect.pdfX,
     pdfY: rect.pdfY,
     width: rect.width,
@@ -256,7 +330,7 @@ export default function PDFViewer({
     opacity: extra.opacity ?? 1,
     layerId,
     ...extra,
-  }), [currentPage, getNextZIndex]);
+  }), [currentPage, currentPageId, getNextZIndex]);
 
   const renderObjects = useMemo(() => {
     if (!interactionState.dragPreview || interactionState.dragPreview.size === 0) return visibleObjects;
@@ -390,11 +464,42 @@ export default function PDFViewer({
     return () => window.removeEventListener('keydown', handler);
   }, [toolRegistry, activeTool]);
 
+  useEffect(() => {
+    const finalizeInteraction = () => {
+      const tool = toolRegistry[activeTool];
+      const hasPendingInteraction = (
+        Boolean(drawingPoints?.length) ||
+        Boolean(textBoxStart) ||
+        Boolean(highlightStart) ||
+        Boolean(redactStart) ||
+        Boolean(editStart) ||
+        Boolean(cropStartRef.current) ||
+        Boolean(imageStartRef.current) ||
+        Boolean(interactionState?.mode)
+      );
+      if (!hasPendingInteraction || !tool?.onMouseUp) return;
+      tool.onMouseUp({ type: 'mouseup' }, lastPointerPosRef.current);
+    };
+
+    window.addEventListener('mouseup', finalizeInteraction);
+    return () => window.removeEventListener('mouseup', finalizeInteraction);
+  }, [
+    activeTool,
+    drawingPoints,
+    editStart,
+    highlightStart,
+    interactionState,
+    redactStart,
+    textBoxStart,
+    toolRegistry,
+  ]);
+
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
     const tool = toolRegistry[activeTool];
     if (!tool?.onClick) return;
     const pos = getCanvasPos(e);
+    lastPointerPosRef.current = pos;
     tool.onClick(e, pos);
   }, [activeTool, toolRegistry, getCanvasPos]);
 
@@ -484,12 +589,14 @@ export default function PDFViewer({
     const tool = toolRegistry[activeTool];
     if (!tool?.onMouseDown) return;
     const pos = getCanvasPos(e);
+    lastPointerPosRef.current = pos;
     tool.onMouseDown(e, pos);
   }, [activeTool, toolRegistry, getCanvasPos]);
 
   const handlePointerMove = useCallback((e) => {
     if (!canvasRef.current) return;
     const pos = getCanvasPos(e);
+    lastPointerPosRef.current = pos;
 
     const tool = toolRegistry[activeTool];
     if (!tool?.onMouseMove) return;
@@ -499,10 +606,16 @@ export default function PDFViewer({
     const tool = toolRegistry[activeTool];
     if (tool?.onMouseUp) {
       const pos = canvasRef.current ? getCanvasPos(e) : { x: 0, y: 0 };
+      lastPointerPosRef.current = pos;
       tool.onMouseUp(e, pos);
     }
     e.currentTarget.releasePointerCapture?.(e.pointerId);
   }, [toolRegistry, activeTool, getCanvasPos]);
+  const handleMouseLeave = useCallback(() => {
+    if (activeTool !== 'draw' || !drawingPoints?.length) return;
+    const tool = toolRegistry[activeTool];
+    tool?.onMouseUp?.({ type: 'mouseleave' }, lastPointerPosRef.current);
+  }, [activeTool, drawingPoints, toolRegistry]);
   const handlePointerCancel = useCallback((e) => {
     const tool = toolRegistry[activeTool];
     if (tool?.onCancel) tool.onCancel(e);
@@ -516,15 +629,20 @@ export default function PDFViewer({
     }
   }, [cropRect, onCropApply, zoom]);
 
-  // ── Drag-and-drop file ─────────────────────────────────────────────────────
-  const handleDragOver  = useCallback((e) => { e.preventDefault(); setIsDragOver(true); }, []);
+  // Drag-and-drop file
+  const handleDragOver  = useCallback((e) => {
+    if (!pdfjsReady) return;
+    e.preventDefault();
+    setIsDragOver(true);
+  }, [pdfjsReady]);
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);
   const handleDrop = useCallback((e) => {
+    if (!pdfjsReady) return;
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
     if (file && file.type === 'application/pdf') onDropFile(file);
-  }, [onDropFile]);
+  }, [onDropFile, pdfjsReady]);
 
   const selectionScreen = selectionBounds
     ? pdfRectToScreen(selectionBounds.pdfX, selectionBounds.pdfY, selectionBounds.width, selectionBounds.height)
@@ -551,15 +669,19 @@ export default function PDFViewer({
   if (!renderDoc) {
     return (
       <div
-        className={`pdf-viewer empty ${isDragOver ? 'drag-active' : ''}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        className={`pdf-viewer empty ${pdfjsReady && isDragOver ? 'drag-active' : ''}`}
+        onDragOver={pdfjsReady ? handleDragOver : undefined}
+        onDragLeave={pdfjsReady ? handleDragLeave : undefined}
+        onDrop={pdfjsReady ? handleDrop : undefined}
       >
         <div className="empty-message">
           <FileSearch size={64} strokeWidth={1.2} className="empty-icon" />
-          <h2>Open a PDF to get started</h2>
-          <p>Click &ldquo;Open&rdquo; in the toolbar, or drag &amp; drop a PDF here</p>
+          <h2>{pdfjsReady ? 'Open a PDF to get started' : 'INITIALIZING ENGINE...'}</h2>
+          <p>
+            {pdfjsReady
+              ? 'Click "Open" in the toolbar, or drag and drop a PDF here'
+              : 'PDF rendering is still loading. Upload is disabled until initialization completes.'}
+          </p>
         </div>
       </div>
     );
@@ -579,7 +701,7 @@ export default function PDFViewer({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onPointerLeave={handlePointerCancel}
+        onMouseLeave={handleMouseLeave}
       >
         <div className={RENDER_LAYERS.pdf}>
           <canvas
@@ -908,7 +1030,7 @@ export default function PDFViewer({
                   if (e.key === 'Escape') setEditInput(null);
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleEditSubmit();
                 }}
-                placeholder="Replace with… (leave empty to just erase)"
+                placeholder="Replace with... (leave empty to just erase)"
                 style={{
                   width: '100%', height: '100%', resize: 'none',
                   fontSize: editInput.fontSize ? `${editInput.fontSize * zoom}px` : undefined,

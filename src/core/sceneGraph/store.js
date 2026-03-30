@@ -81,7 +81,10 @@ export function useEditorStore(initialObjects = []) {
   const pages = useMemo(() => (
     pageMeta.map(meta => ({
       ...meta,
-      objects: history.state.filter(obj => obj.page === meta.number),
+      objects: history.state.filter((obj) => {
+        if (obj.pageId) return obj.pageId === meta.id;
+        return obj.page === meta.number;
+      }),
     }))
   ), [pageMeta, history.state]);
 
