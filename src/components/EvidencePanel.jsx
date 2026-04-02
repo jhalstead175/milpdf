@@ -10,12 +10,12 @@ export default function EvidencePanel({
   const [startNumber, setStartNumber] = useState(1);
 
   const exhibitList = useMemo(() => (
-    exhibits.length > 0 ? exhibits : [{ id: 'unassigned', label: 'Unassigned', markers: markers }]
+    exhibits.length > 0 ? exhibits : [{ id: 'unassigned', label: 'Needs Assignment', markers: markers }]
   ), [exhibits, markers]);
 
   return (
     <div className="panel evidence-panel">
-      <div className="panel-header">Evidence</div>
+      <div className="panel-header">Evidence References</div>
       <div className="panel-body">
         <div className="evidence-export">
           <div className="field-row">
@@ -41,12 +41,12 @@ export default function EvidencePanel({
             className="btn-primary"
             onClick={() => onExportBundle?.({ prefix, startNumber })}
           >
-            Export Evidence Bundle
+            Export Evidence PDF
           </button>
         </div>
 
         {exhibitList.length === 0 && (
-          <div className="panel-empty">No evidence markers yet.</div>
+          <div className="panel-empty">No evidence references have been staged yet.</div>
         )}
 
         {exhibitList.map(exhibit => (

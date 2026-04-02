@@ -2,30 +2,33 @@ import {
   FileText, Shield, PenTool, Scissors, Layers, FileSearch,
   Merge, Crop, Highlighter, Pencil, Droplets, Type,
   Download, Globe, ChevronRight, Lock, Eye, Users,
+  ImagePlus, RotateCw,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const IC = { strokeWidth: 1.4 };
 
 const features = [
-  { Icon: FileText, title: 'Open & Save', desc: 'Load any PDF. Save with all edits embedded.' },
-  { Icon: Type, title: 'Text Annotations', desc: 'Click anywhere to type directly onto a page.' },
-  { Icon: PenTool, title: 'E-Signatures', desc: 'Draw or upload your signature. Place it anywhere.' },
-  { Icon: Highlighter, title: 'Highlight & Markup', desc: 'Highlight text with semi-transparent overlays.' },
-  { Icon: Pencil, title: 'Freehand Drawing', desc: 'Draw freely on any page with precision.' },
-  { Icon: Shield, title: 'Redaction', desc: 'Permanently black out SSNs, sensitive data.' },
-  { Icon: Crop, title: 'Crop Pages', desc: 'Draw a crop box and trim any page.' },
-  { Icon: Layers, title: 'Add & Delete Pages', desc: 'Insert blanks, remove pages, rotate.' },
-  { Icon: Merge, title: 'Merge PDFs', desc: 'Combine multiple documents into one.' },
-  { Icon: Scissors, title: 'Split & Extract', desc: 'Pull a page range into a new PDF.' },
-  { Icon: Droplets, title: 'Watermarks', desc: 'Stamp DRAFT, CONFIDENTIAL across all pages.' },
-  { Icon: FileSearch, title: 'Export to Word', desc: 'Extract text into a clean .docx file.' },
+  { Icon: FileText, title: 'Open & Save', desc: 'Load a PDF, review it, and save with edits embedded.' },
+  { Icon: ImagePlus, title: 'Create PDF from Images', desc: 'Turn photos or scans into a clean working PDF.' },
+  { Icon: Merge, title: 'Merge & Insert PDFs', desc: 'Append another PDF or insert pages exactly where you need them.' },
+  { Icon: Layers, title: 'Page Organization', desc: 'Insert blanks, delete pages, and manage packet structure.' },
+  { Icon: RotateCw, title: 'Rotate & Reorder', desc: 'Fix orientation and rearrange page order for production.' },
+  { Icon: Scissors, title: 'Split & Extract', desc: 'Pull a page range into a new PDF for filing or sharing.' },
+  { Icon: Type, title: 'Text Annotations', desc: 'Type directly onto the page with precise placement.' },
+  { Icon: PenTool, title: 'E-Signatures', desc: 'Draw or place a signature anywhere on the document.' },
+  { Icon: Highlighter, title: 'Highlight & Markup', desc: 'Mark important passages for review, findings, or evidence.' },
+  { Icon: Pencil, title: 'Freehand Drawing', desc: 'Add quick visual notes and markups during review.' },
+  { Icon: Shield, title: 'Redaction', desc: 'Identify and permanently remove sensitive data from exports.' },
+  { Icon: Crop, title: 'Crop Pages', desc: 'Trim page view for cleaner production-ready packets.' },
+  { Icon: Droplets, title: 'Watermarks', desc: 'Apply draft or confidentiality marks before distribution.' },
+  { Icon: FileSearch, title: 'Export to Word', desc: 'Convert the current PDF into a clean .docx document.' },
 ];
 
 const pillars = [
-  { Icon: Lock, title: 'Zero Data Collection', desc: 'Everything runs in your browser. No uploads, no servers, no tracking. Your documents never leave your machine.' },
-  { Icon: Eye, title: 'Full Transparency', desc: 'Open source. No hidden analytics, no telemetry, no ads. Inspect every line of code yourself.' },
-  { Icon: Users, title: 'Built for Veterans', desc: 'Designed to handle VA paperwork, DD-214s, medical records, benefits forms — the documents that matter most.' },
+  { Icon: Lock, title: 'Private by Default', desc: 'Your PDFs stay on your machine. No accounts, no uploads, and no document handoff to a third-party service.' },
+  { Icon: Eye, title: 'Operational Clarity', desc: 'The interface is built for review work: clear status, visible tools, and export actions that are easy to audit.' },
+  { Icon: Users, title: 'Built for Serious Document Work', desc: 'MilPDF is designed for legal, veteran, and structured-document workflows where speed, traceability, and reliability matter.' },
 ];
 
 export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
@@ -76,12 +79,12 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
             <span className="hero-title-mil">Mil</span>PDF
           </h1>
           <p className="hero-subtitle">
-            Military-grade PDF editing. Free. Private. No compromises.
+            A professional PDF workbench for review, annotation, and export.
           </p>
           <p className="hero-desc">
-            Built for those who served. A full-featured PDF editor that runs
-            entirely in your browser — no uploads, no accounts, no data collection.
-            Your documents stay on your machine. Period.
+            Built for legal, veteran, and structured-document workflows. Open, combine,
+            mark up, redact, and export with a private local-first workflow that keeps
+            your documents on your machine.
           </p>
           <div className="hero-actions">
             <button className="landing-btn-primary" onClick={onLaunchEditor}>
@@ -105,7 +108,7 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
             <span className="heading-accent">//</span> Capabilities
           </h2>
           <p className="section-subheading">
-            Every tool you need. Nothing you don't.
+            Core PDF workflows for serious document preparation.
           </p>
           <div className="features-grid">
             {features.map((feature) => (
@@ -128,7 +131,7 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
             <span className="heading-accent">//</span> Mission
           </h2>
           <p className="section-subheading">
-            Privacy is not a feature. It's the foundation.
+            Private local work, with clear production-ready tools.
           </p>
           <div className="pillars-grid">
             {pillars.map((pillar) => (

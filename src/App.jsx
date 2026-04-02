@@ -1,22 +1,29 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import LandingPage from './components/LandingPage';
 import './components/LandingPage.css';
-import V3AppShell from './app/AppShell';
-import PageThumbnails from './components/PageThumbnails';
-import PDFViewer from './components/PDFViewer';
+import AppShell from './app/AppShell';
+import PrimaryNav from './app/layout/PrimaryNav';
+import GlobalTopBar from './app/layout/GlobalTopBar';
+import StatusBar from './app/layout/StatusBar';
+import InboxWorkspace from './app/workspaces/InboxWorkspace';
+import ReviewWorkspace from './app/workspaces/ReviewWorkspace';
+import FindingsWorkspace from './app/workspaces/FindingsWorkspace';
+import EvidenceWorkspace from './app/workspaces/EvidenceWorkspace';
+import PacketWorkspace from './app/workspaces/PacketWorkspace';
+import ExportWorkspace from './app/workspaces/ExportWorkspace';
+import AssistantDock from './app/panels/AssistantDock';
+import { WORKSPACE_ITEMS } from './app/config/navigation';
+import { useWorkspaceStore } from './app/state/useWorkspaceStore';
+import { useFindingsStore } from './app/state/useFindingsStore';
 import CommandPalette from './components/CommandPalette';
 import SignaturePad from './components/SignaturePad';
 import ProfileModal from './components/ProfileModal';
-import LayersPanel from './components/LayersPanel';
-import InspectorPanel from './components/InspectorPanel';
-import EvidencePanel from './components/EvidencePanel';
-import CaseGraph from './components/CaseGraph';
-import AvaPanel from './components/AvaPanel';
 import ToastStack from './components/ToastStack';
+import ActionReviewModal from './components/ActionReviewModal';
 import { useEditorStore } from './core/sceneGraph/store';
 import {
   loadPdf, deletePage, reorderPages, rotatePage,
-  addBlankPage, mergePdf, insertPdf, cropPage,
+  addBlankPage, mergePdf, insertPdf, cropPage, imagesToPdf,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { secureEmbed } from './core/export';
@@ -36,28 +43,25 @@ import {
 import { bringForward, sendBackward, bringToFront, sendToBack } from './editor/zorder';
 import { buildCommandRegistry } from './core/commands/registry';
 import { buildShortcutMap, eventToShortcut } from './core/commands/executor';
-import { buildEvidenceIndex, exportEvidenceBundle } from './core/evidence';
+import { buildEvidenceIndex } from './core/evidence';
 import { buildCaseGraph } from './core/caseGraph';
 import { buildCaseContext, askAva } from './core/ai';
 import { createKernel, CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG } from './core/kernel';
 import './App.css';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
-const SHELL_TABS = ['tools', 'annotate', 'pages', 'export'];
-const TOOL_RAIL_ITEMS = [
-  { id: 'select', glyph: '↖', label: 'Select' },
-  { id: 'highlight', glyph: '▬', label: 'Highlight' },
-  { id: 'draw', glyph: '✏', label: 'Draw' },
-  { id: 'text', glyph: 'T', label: 'Text' },
-  { id: 'note', glyph: '📌', label: 'Note' },
-  { id: 'eraser', glyph: '⌫', label: 'Eraser' },
-];
 
 let pageMetaSeed = 0;
+let phase3EntitySeed = 0;
 
 function nextPageMetaId() {
   pageMetaSeed += 1;
   return `page-meta-${pageMetaSeed}`;
+}
+
+function nextPhase3Id(prefix) {
+  phase3EntitySeed += 1;
+  return `${prefix}-${phase3EntitySeed}`;
 }
 
 function buildPageMetaFromDoc(doc, pageIds = []) {
@@ -88,17 +92,6 @@ function getActiveToolLabel(tool) {
   return 'Select';
 }
 
-function getAnnotationSummary(obj) {
-  if (obj.type === 'text') return obj.text?.trim() || 'Text annotation';
-  if (obj.type === 'drawing') return 'Freehand drawing';
-  if (obj.type === 'highlight') return 'Highlight';
-  if (obj.type === 'redact') return 'Redaction';
-  if (obj.type === 'whiteout') return 'Whiteout';
-  if (obj.type === 'signature') return 'Signature';
-  if (obj.type === 'image') return obj.name || 'Image';
-  return obj.name || obj.type;
-}
-
 function triggerJsonDownload(payload, filename) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -111,16 +104,104 @@ function triggerJsonDownload(payload, filename) {
   URL.revokeObjectURL(url);
 }
 
+function buildAssistantActionCatalog({ currentPage, hasDocument }) {
+  return [
+    {
+      id: 'summarize_page',
+      label: 'Summarize current page',
+      description: 'Capture the most important evidence on the active page.',
+      scope: `Page ${currentPage}`,
+      outputLabel: 'Page summary finding',
+      reviewLabel: 'Review before promoting to evidence',
+      notes: [
+        'Runs against the current page context.',
+        'Creates a structured finding instead of editing the document.',
+        'Leaves final evidence promotion to the reviewer.',
+      ],
+      prompt: `Summarize page ${currentPage} and list the most important evidence points.`,
+      disabled: !hasDocument,
+    },
+    {
+      id: 'extract_dates',
+      label: 'Extract dates',
+      description: 'Generate a date-focused review queue for the current document.',
+      scope: 'Current document',
+      outputLabel: 'Timeline-oriented findings',
+      reviewLabel: 'Review before packet use',
+      notes: [
+        'Extracts dates and why they matter.',
+        'Creates findings that can be accepted or rejected.',
+        'Does not alter the PDF.',
+      ],
+      prompt: 'Extract every important date from the current document and explain why each matters.',
+      disabled: !hasDocument,
+    },
+    {
+      id: 'find_pii',
+      label: 'Find PII',
+      description: 'Detect likely personal information before redaction or export.',
+      scope: 'Current document',
+      outputLabel: 'Sensitive-data findings',
+      reviewLabel: 'Review before applying redactions',
+      notes: [
+        'Scans text for likely SSNs, dates of birth, phone numbers, and DoD IDs.',
+        'Creates findings and does not automatically redact.',
+        'Lets the reviewer decide what becomes a redaction.',
+      ],
+      prompt: 'Identify possible SSNs, dates of birth, addresses, and other personal information that may need redaction.',
+      disabled: !hasDocument,
+    },
+    {
+      id: 'draft_exhibit_note',
+      label: 'Draft exhibit note',
+      description: 'Create a concise summary that can be promoted into evidence.',
+      scope: 'Current page or document',
+      outputLabel: 'Evidence draft',
+      reviewLabel: 'Review before packet inclusion',
+      notes: [
+        'Uses the current page context for a concise summary.',
+        'Creates an evidence draft, not a final packet artifact.',
+        'Keeps all output editable before export.',
+      ],
+      prompt: 'Draft a concise exhibit note for the current page or document.',
+      disabled: !hasDocument,
+    },
+  ];
+}
+
 function App() {
   const [view, setView] = useState('landing');
-  const [showV3, setShowV3] = useState(false);
   const kernel = useMemo(() => createKernel(), []);
   const [toasts, setToasts] = useState([]);
   const [pdfjsReady, setPdfjsReady] = useState(false);
+  const {
+    workspace,
+    setWorkspace,
+    assistantOpen,
+    toggleAssistant,
+    reviewPanelTab,
+    setReviewPanelTab,
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+  } = useWorkspaceStore(isElectron ? 'review' : 'inbox');
+  const {
+    findings,
+    addFindings,
+    activeFilter: findingsFilter,
+    setActiveFilter: setFindingsFilter,
+    selectedFindingId,
+    setSelectedFindingId,
+    acceptFinding,
+    rejectFinding,
+  } = useFindingsStore();
+  const [assistantRunHistory, setAssistantRunHistory] = useState([]);
+  const [assistantActionProposal, setAssistantActionProposal] = useState(null);
+  const [evidenceItems, setEvidenceItems] = useState([]);
 
   useEffect(() => {
     if (isElectron) setView('editor');
-  }, []);
+    if (isElectron) setWorkspace('review');
+  }, [setWorkspace]);
 
   useEffect(() => {
     kernel.init(CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG);
@@ -216,7 +297,6 @@ function App() {
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
   const selectionIds = selection;
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState(null);
   const [profile, setProfile] = useState(() => loadProfile());
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -237,13 +317,13 @@ function App() {
   const mergeInputRef = useRef(null);
   const insertFileRef = useRef(null);
   const imageInputRef = useRef(null);
+  const imagesToPdfInputRef = useRef(null);
   const jsonInputRef = useRef(null);
   const wheelAccumulatorRef = useRef(0);
   const wheelResetTimeoutRef = useRef(null);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
   const [imagePlacement, setImagePlacement] = useState(null);
-  const [panelTab, setPanelTab] = useState(null);
   const [toolDefaults, setToolDefaults] = useState({
     text: {
       fontSize: 16,
@@ -326,12 +406,13 @@ function App() {
       const fieldNames = formFields.map(f => f.fieldName).filter(Boolean);
       setFormProfileKey(detectFormProfile(fieldNames));
       setActiveTool('select');
+      setWorkspace('review');
     } catch (err) {
       alert('Failed to load PDF: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfjsReady, updateFromResult, resetObjects, setSelection, setActiveTool]);
+  }, [pdfjsReady, updateFromResult, resetObjects, setSelection, setActiveTool, setWorkspace]);
 
   // --- Load a PDF from File object (browser drag-drop / input) ---
   const loadFile = useCallback(async (file) => {
@@ -382,7 +463,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, fileName, watermarkText, layers]);
+  }, [pdfBytes, objects, fileName, watermarkText, layers, renderDoc]);
 
   const handleSaveAs = useCallback(async () => {
     if (!pdfBytes) return;
@@ -408,7 +489,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, fileName, watermarkText, layers]);
+  }, [pdfBytes, objects, fileName, watermarkText, layers, renderDoc]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -461,10 +542,9 @@ function App() {
     insertFileRef.current?.click();
   }, []);
 
-  const handleInsertPdf = useCallback(() => {
+  const handleInsertPdfPages = useCallback(() => {
     if (!pdfDoc) return;
-    setInsertPosition('after');
-    insertFileRef.current?.click();
+    setShowInsertDialog(true);
   }, [pdfDoc]);
 
   const handleInsertFileChange = useCallback(async (e) => {
@@ -608,7 +688,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, watermarkText, layers]);
+  }, [pdfBytes, objects, watermarkText, layers, renderDoc]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -736,6 +816,10 @@ const runDD214Analysis = useCallback(async () => {
     imageInputRef.current?.click();
   }, []);
 
+  const handleCreatePdfFromImages = useCallback(() => {
+    imagesToPdfInputRef.current?.click();
+  }, []);
+
   const readImageFile = useCallback(async (file) => {
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -775,6 +859,36 @@ const runDD214Analysis = useCallback(async () => {
     if (e.target) e.target.value = '';
   }, [queueImagePlacements]);
 
+  const handleImagesToPdfFiles = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setLoading(true);
+    try {
+      const result = await imagesToPdf(files);
+      updateFromResult(result, { pageIds: [] });
+      resetObjects([]);
+      setSelection([]);
+      setFormProfileKey(null);
+      setWatermarkText('');
+      setFileName(files.length === 1
+        ? files[0].name.replace(/\.[^.]+$/u, '.pdf')
+        : 'image-bundle.pdf');
+      setCurrentPage(1);
+      setActiveTool('select');
+      setWorkspace('review');
+      pushToast({
+        type: 'success',
+        title: 'PDF Created',
+        message: `${files.length} image${files.length === 1 ? '' : 's'} converted into a new PDF.`,
+      });
+    } catch (err) {
+      alert('Failed to create PDF from images: ' + err.message);
+    } finally {
+      setLoading(false);
+      if (e.target) e.target.value = '';
+    }
+  }, [pushToast, resetObjects, setActiveTool, setSelection, setWorkspace, updateFromResult]);
+
   // --- Listen for files opened via OS file association (Electron) ---
   useEffect(() => {
     if (!isElectron) return;
@@ -794,8 +908,9 @@ const runDD214Analysis = useCallback(async () => {
       files.sort((a, b) => a.name.localeCompare(b.name));
       await queueImagePlacements(files);
       setView('editor');
+      setWorkspace('review');
     });
-  }, [loadFromBuffer, queueImagePlacements, setView]);
+  }, [loadFromBuffer, queueImagePlacements, setView, setWorkspace]);
 
   useEffect(() => {
     setImagePlacement(imagePlacementQueue[0] || null);
@@ -857,34 +972,6 @@ const runDD214Analysis = useCallback(async () => {
     pages,
   }), [evidenceIndex, pages]);
 
-  const handleExportEvidenceBundle = useCallback(async ({ prefix, startNumber }) => {
-    if (!pdfBytes) return;
-    setLoading(true);
-    try {
-      const bytes = await exportEvidenceBundle({
-        pdfBytes,
-        exhibits: evidenceIndex.exhibits,
-        markers: evidenceIndex.markers,
-        batesPrefix: prefix || 'MILPDF-',
-        batesStartNumber: startNumber || 1,
-        title: 'Evidence Bundle',
-      });
-      const filename = fileName.replace(/\.pdf$/i, '_evidence_bundle.pdf');
-      if (isElectron) {
-        const base64 = btoa(
-          new Uint8Array(bytes).reduce((s, b) => s + String.fromCharCode(b), '')
-        );
-        await window.electronAPI.saveFileDialog(filename, base64);
-      } else {
-        await saveWithDialog(bytes, filename);
-      }
-    } catch (err) {
-      alert('Failed to export evidence bundle: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [pdfBytes, evidenceIndex, fileName]);
-
   const handleAskAva = useCallback(async (question) => {
     const context = await buildCaseContext({
       renderDoc,
@@ -893,6 +980,139 @@ const runDD214Analysis = useCallback(async () => {
     });
     return askAva(question, context);
   }, [renderDoc, evidenceIndex, caseGraph]);
+
+  const appendAssistantRun = useCallback((entry) => {
+    setAssistantRunHistory((prev) => [
+      { id: nextPhase3Id('assistant-run'), ...entry },
+      ...prev,
+    ].slice(0, 8));
+  }, []);
+
+  const promoteFindingToEvidence = useCallback((findingId) => {
+    const finding = findings.find((item) => item.id === findingId);
+    if (!finding) return;
+
+    acceptFinding(findingId);
+    setEvidenceItems((prev) => {
+      if (prev.some((item) => item.sourceFindingId === findingId)) return prev;
+      return [
+        {
+          id: nextPhase3Id('evidence'),
+          sourceFindingId: findingId,
+          title: finding.title,
+          summary: finding.summary,
+          page: finding.page,
+          type: finding.type,
+        },
+        ...prev,
+      ];
+    });
+    pushToast({
+      type: 'success',
+      title: 'Evidence Added',
+      message: `${finding.title} is ready for packet prep.`,
+    });
+  }, [acceptFinding, findings, pushToast]);
+
+  const runAssistantAction = useCallback(async (action) => {
+    if (!action || (action.disabled && !renderDoc)) return;
+
+    setLoading(true);
+    try {
+      if (action.id === 'find_pii') {
+        const piiMatches = await scanForPii(renderDoc);
+        const piiFindings = piiMatches.map((match) => ({
+          id: nextPhase3Id('finding'),
+          type: 'pii',
+          typeLabel: match._piiLabel || 'Sensitive Information',
+          title: `${match._piiLabel || 'Sensitive information'} detected`,
+          summary: `${match._piiText || 'Sensitive data'} on page ${match.page}.`,
+          detail: `Review the highlighted value before applying a redaction. Candidate: ${match._piiText || 'n/a'}`,
+          page: match.page,
+          status: 'proposed',
+          createdBy: 'assistant',
+          metadata: {
+            piiType: match._piiType,
+            piiText: match._piiText,
+          },
+        }));
+
+        if (piiFindings.length === 0) {
+          appendAssistantRun({ label: action.label, outcome: 'No likely PII found.' });
+          pushToast({ type: 'info', title: 'PII Scan Complete', message: 'No likely PII found.' });
+          return;
+        }
+
+        addFindings(piiFindings);
+        setSelectedFindingId(piiFindings[0]?.id || null);
+        setWorkspace('findings');
+        appendAssistantRun({ label: action.label, outcome: `${piiFindings.length} findings created.` });
+        pushToast({
+          type: 'success',
+          title: 'PII Findings Ready',
+          message: `${piiFindings.length} sensitive-data findings are ready for review.`,
+        });
+        return;
+      }
+
+      const result = await handleAskAva(action.prompt);
+      const answer = result?.answer || result?.content || 'No response generated.';
+      const finding = {
+        id: nextPhase3Id('finding'),
+        type: action.id === 'extract_dates' ? 'timeline' : action.id === 'draft_exhibit_note' ? 'exhibit_note' : 'summary',
+        typeLabel: action.id === 'extract_dates' ? 'Date Review' : action.id === 'draft_exhibit_note' ? 'Exhibit Draft' : 'Page Summary',
+        title: action.label,
+        summary: answer.split('\n')[0] || action.description,
+        detail: answer,
+        page: currentPage,
+        status: 'proposed',
+        createdBy: 'assistant',
+      };
+
+      if (action.id === 'draft_exhibit_note') {
+        setEvidenceItems((prev) => [
+          {
+            id: nextPhase3Id('evidence'),
+            sourceFindingId: finding.id,
+            title: `Exhibit Draft · Page ${currentPage}`,
+            summary: finding.summary,
+            page: currentPage,
+            type: 'exhibit_note',
+          },
+          ...prev,
+        ]);
+      }
+
+      addFindings([finding]);
+      setSelectedFindingId(finding.id);
+      setWorkspace(action.id === 'draft_exhibit_note' ? 'evidence' : 'findings');
+      appendAssistantRun({ label: action.label, outcome: 'Review-ready output created.' });
+      pushToast({
+        type: 'success',
+        title: 'Assistant Output Ready',
+        message: `${action.label} created a review-ready item.`,
+      });
+    } catch (err) {
+      appendAssistantRun({ label: action.label, outcome: 'Action failed.' });
+      pushToast({
+        type: 'info',
+        title: 'Assistant Action Failed',
+        message: err.message,
+      });
+    } finally {
+      setAssistantActionProposal(null);
+      setLoading(false);
+    }
+  }, [
+    addFindings,
+    appendAssistantRun,
+    currentPage,
+    handleAskAva,
+    pushToast,
+    renderDoc,
+    setSelectedFindingId,
+    setWorkspace,
+  ]);
 
   const handleKernelHealthCheck = useCallback(() => {
     try {
@@ -1001,22 +1221,6 @@ const runDD214Analysis = useCallback(async () => {
   useEffect(() => () => {
     window.clearTimeout(wheelResetTimeoutRef.current);
   }, []);
-
-  const togglePanelTab = useCallback((tab) => {
-    setPanelTab(prev => (prev === tab ? null : tab));
-  }, []);
-
-  const handleRailToolClick = useCallback((toolId) => {
-    if (toolId === 'note') {
-      handleToolChange('signature');
-      return;
-    }
-    if (toolId === 'eraser') {
-      setActiveTool('edit');
-      return;
-    }
-    setActiveTool(toolId);
-  }, [handleToolChange, setActiveTool]);
 
   const handleToolDefaultChange = useCallback((tool, key, value) => {
     setToolDefaults(prev => ({
@@ -1132,14 +1336,14 @@ const runDD214Analysis = useCallback(async () => {
     [currentPageObjects]
   );
 
-    const commandContext = useMemo(() => ({
-      hasDoc: !!renderDoc,
-      setActiveTool,
-      handleToolChange,
-      handleOpen,
-      handleSave,
-      handleSaveAs,
-      handleMerge,
+  const commandContext = useMemo(() => ({
+    hasDoc: !!renderDoc,
+    setActiveTool,
+    handleToolChange,
+    handleOpen,
+    handleSave,
+    handleSaveAs,
+    handleMerge,
     handleSplit,
     handleRotate,
     handleAddBlank,
@@ -1148,12 +1352,14 @@ const runDD214Analysis = useCallback(async () => {
     handleExportWord,
     handleWatermark,
     handleImportImages,
+    handleCreatePdfFromImages,
+    handleInsertPdfPages,
     setShowSignaturePad,
     signatureDataUrl,
     setZoom,
     setCurrentPage,
     numPages,
-    toggleCommandPalette: () => setShowCommandPalette(p => !p),
+    toggleCommandPalette: () => setCommandPaletteOpen((prev) => !prev),
     setActiveWorkflow,
     runDD214Analysis,
     runAutoRedact,
@@ -1167,11 +1373,12 @@ const runDD214Analysis = useCallback(async () => {
     openProfile: () => setShowProfileModal(true),
     autoFillProfile: handleAutoFill,
     runKernelHealthCheck: handleKernelHealthCheck,
-    }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleSaveAs, handleMerge, handleSplit, handleRotate,
-      handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
-      signatureDataUrl, setZoom, setCurrentPage, numPages, setActiveWorkflow, runDD214Analysis,
-      runAutoRedact, handleAlignment, handleZOrder, handleCopy, handlePaste, handleDuplicate,
-      undo, redo, handleAutoFill, setShowProfileModal, handleKernelHealthCheck]);
+  }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleSaveAs, handleMerge, handleSplit, handleRotate,
+    handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
+    handleCreatePdfFromImages, handleInsertPdfPages, signatureDataUrl, setZoom, setCurrentPage, numPages,
+    setActiveWorkflow, runDD214Analysis, runAutoRedact, handleAlignment, handleZOrder, handleCopy,
+    handlePaste, handleDuplicate, undo, redo, handleAutoFill, setShowProfileModal,
+    handleKernelHealthCheck, setCommandPaletteOpen]);
 
   const commands = useMemo(() => buildCommandRegistry(commandContext), [commandContext]);
 
@@ -1263,318 +1470,303 @@ const runDD214Analysis = useCallback(async () => {
   }, [renderDoc, activeTool, selectionIds, selectedObjects, numPages, handleDeletePage,
     handleBatchUpdateObjects, runCommand, shortcutMap, redo]);
 
+  const assistantSuggestedActions = useMemo(
+    () => buildAssistantActionCatalog({ currentPage, hasDocument: !!renderDoc }),
+    [currentPage, renderDoc]
+  );
+
+  const handleSuggestedAssistantAction = useCallback((actionId) => {
+    const action = assistantSuggestedActions.find((item) => item.id === actionId)
+      || assistantSuggestedActions.find((item) => item.label === actionId);
+    if (!action) return actionId;
+
+    setAssistantActionProposal(action);
+    setReviewPanelTab('assistant');
+    pushToast({
+      type: 'info',
+      title: 'Assistant Action Ready',
+      message: `${action.label} is ready for review and approval.`,
+    });
+    return action.prompt;
+  }, [assistantSuggestedActions, pushToast, setReviewPanelTab]);
+
+  const workspaceLabel = useMemo(() => (
+    WORKSPACE_ITEMS.find((item) => item.id === workspace)?.label || 'Review'
+  ), [workspace]);
+
+  const matterName = activeFormProfile?.name || 'Current Matter';
+  const findingsCount = pageAnnotations.length + evidenceIndex.markers.length + findings.filter((finding) => finding.status !== 'rejected').length;
+  const exportReady = !!renderDoc;
+  const unsavedChanges = objects.length > 0;
+  const reviewFindings = useMemo(
+    () => findings.filter((finding) => finding.page === currentPage),
+    [findings, currentPage]
+  );
+  const assistantIntroActions = useMemo(() => ([
+    {
+      label: 'Upload Document',
+      variant: 'primary',
+      onClick: handleOpen,
+      disabled: !pdfjsReady,
+    },
+    {
+      label: 'Prepare Claim Packet',
+      variant: 'secondary',
+      onClick: () => setWorkspace('packet'),
+      disabled: !renderDoc,
+    },
+    {
+      label: 'Redact Personal Info',
+      variant: 'secondary',
+      onClick: runAutoRedact,
+      disabled: !renderDoc,
+    },
+    {
+      label: 'Open Editor',
+      variant: 'secondary',
+      onClick: () => setWorkspace('review'),
+      disabled: false,
+    },
+  ]), [handleOpen, pdfjsReady, renderDoc, runAutoRedact, setWorkspace]);
+
+  const pdfWorkbenchTools = useMemo(() => ([
+    {
+      id: 'document-prep',
+      title: 'Document Prep',
+      description: 'Open, combine, and create working PDFs before review begins.',
+      items: [
+        { label: 'Open PDF', detail: 'Load a PDF into the workbench.', actionLabel: 'Open', onAction: handleOpen, disabled: !pdfjsReady },
+        { label: 'Create PDF from images', detail: 'Convert photos or scans into a single PDF.', actionLabel: 'Create', onAction: handleCreatePdfFromImages, disabled: false },
+        { label: 'Merge PDF', detail: 'Append another PDF to the current document.', actionLabel: 'Merge', onAction: handleMerge, disabled: !renderDoc },
+        { label: 'Insert pages from PDF', detail: 'Insert pages before or after the active page.', actionLabel: 'Insert', onAction: handleInsertPdfPages, disabled: !renderDoc },
+      ],
+    },
+    {
+      id: 'page-ops',
+      title: 'Page Tools',
+      description: 'Reshape the packet structure without leaving the review workspace.',
+      items: [
+        { label: 'Insert blank page', detail: 'Add a blank page before or after the current page.', actionLabel: 'Insert', onAction: handleAddBlank, disabled: !renderDoc },
+        { label: 'Rotate page', detail: 'Rotate the current page clockwise.', actionLabel: 'Rotate', onAction: () => handleRotate(90), disabled: !renderDoc },
+        { label: 'Extract page range', detail: 'Export a page range into a new PDF.', actionLabel: 'Extract', onAction: handleSplit, disabled: !renderDoc || numPages <= 1 },
+        { label: 'Watermark document', detail: 'Apply or remove a review watermark before export.', actionLabel: watermarkText ? 'Edit' : 'Add', onAction: handleWatermark, disabled: !renderDoc },
+      ],
+    },
+    {
+      id: 'markup-export',
+      title: 'Markup & Output',
+      description: 'Use MilPDF for annotation, redaction, and production-ready exports.',
+      items: [
+        { label: 'Highlight and annotate', detail: 'Open the review workspace with drawing and text tools.', actionLabel: 'Review', onAction: () => setWorkspace('review'), disabled: false },
+        { label: 'Redact personal info', detail: 'Scan for likely PII and stage redactions for review.', actionLabel: 'Scan', onAction: runAutoRedact, disabled: !renderDoc },
+        { label: 'Export to Word', detail: 'Convert the current PDF into DOCX.', actionLabel: 'Export', onAction: handleExportWord, disabled: !renderDoc },
+        { label: 'Print final PDF', detail: 'Render the current document with embedded changes.', actionLabel: 'Print', onAction: handlePrint, disabled: !renderDoc },
+      ],
+    },
+  ]), [handleAddBlank, handleCreatePdfFromImages, handleExportWord, handleMerge, handleOpen, handleInsertPdfPages,
+    handlePrint, handleRotate, handleSplit, handleWatermark, numPages, pdfjsReady, renderDoc,
+    runAutoRedact, setWorkspace, watermarkText]);
+
+  let workspaceContent = null;
+
+  if (workspace === 'inbox') {
+    workspaceContent = (
+      <InboxWorkspace
+        matterName={matterName}
+        fileName={fileName}
+        numPages={numPages}
+        findings={findings}
+        evidenceItems={evidenceItems}
+        suggestedActions={assistantSuggestedActions}
+        toolGroups={pdfWorkbenchTools}
+        onOpenDocument={handleOpen}
+        onCreatePdfFromImages={handleCreatePdfFromImages}
+        onGoReview={() => setWorkspace('review')}
+        onGoFindings={() => setWorkspace('findings')}
+        onRunSuggestedAction={handleSuggestedAssistantAction}
+      />
+    );
+  } else if (workspace === 'findings') {
+    workspaceContent = (
+      <FindingsWorkspace
+        findings={findings}
+        activeFilter={findingsFilter}
+        selectedFindingId={selectedFindingId}
+        onFilterChange={setFindingsFilter}
+        onSelectFinding={setSelectedFindingId}
+        onAcceptFinding={acceptFinding}
+        onRejectFinding={rejectFinding}
+        onPromoteFinding={promoteFindingToEvidence}
+        onJumpToPage={(page) => {
+          setCurrentPageAndScroll(page);
+          setWorkspace('review');
+        }}
+      />
+    );
+  } else if (workspace === 'evidence') {
+    workspaceContent = (
+      <EvidenceWorkspace
+        evidenceItems={evidenceItems}
+        onJumpToPage={(page) => {
+          setCurrentPageAndScroll(page);
+          setWorkspace('review');
+        }}
+        onGoPacket={() => setWorkspace('packet')}
+      />
+    );
+  } else if (workspace === 'packet') {
+    workspaceContent = (
+      <PacketWorkspace
+        findings={findings}
+        evidenceItems={evidenceItems}
+        onGoExport={() => setWorkspace('export')}
+      />
+    );
+  } else if (workspace === 'export') {
+    workspaceContent = (
+      <ExportWorkspace
+        objects={objects}
+        watermarkText={watermarkText}
+        renderDoc={renderDoc}
+        onExportJson={handleExportJson}
+        onImportJson={() => jsonInputRef.current?.click()}
+        onSave={handleSave}
+        onSaveAs={handleSaveAs}
+        onExportWord={handleExportWord}
+        onToggleWatermark={handleWatermark}
+        onPrint={handlePrint}
+        onInsertPdfPages={handleInsertPdfPages}
+        onCreatePdfFromImages={handleCreatePdfFromImages}
+        onRunHealthCheck={handleKernelHealthCheck}
+      />
+    );
+  } else {
+    workspaceContent = (
+      <ReviewWorkspace
+        renderDoc={renderDoc}
+        pdfjsReady={pdfjsReady}
+        numPages={numPages}
+        currentPage={currentPage}
+        zoom={zoom}
+        activeTool={activeTool}
+        currentPageMeta={currentPageMeta}
+        currentPageObjects={currentPageObjects}
+        selectionIds={selectionIds}
+        selectedObjects={selectedObjects}
+        interactionState={interactionState}
+        setInteractionState={setInteractionState}
+        objects={objects}
+        layers={layers}
+        toolDefaults={toolDefaults}
+        activeToolConfig={activeToolConfig}
+        activeFormProfile={activeFormProfile}
+        fileName={fileName}
+        watermarkText={watermarkText}
+        imagePlacement={imagePlacement}
+        signatureDataUrl={signatureDataUrl}
+        evidenceIndex={evidenceIndex}
+        pageAnnotations={pageAnnotations}
+        reviewFindings={reviewFindings}
+        reviewPanelTab={reviewPanelTab}
+        onReviewPanelTabChange={setReviewPanelTab}
+        onViewerWheel={handleViewerWheel}
+        onHandleOpen={handleOpen}
+        onHandleInsertPdfPages={handleInsertPdfPages}
+        onHandleToolChange={handleToolChange}
+        onHandleToolDefaultChange={handleToolDefaultChange}
+        onSetSelection={setSelection}
+        onToggleVisible={handleToggleVisible}
+        onToggleLocked={handleToggleLocked}
+        onLayerReorder={handleLayerReorder}
+        onUpdateObject={handleUpdateObject}
+        onDeleteObject={handleDeleteObject}
+        onSetActiveTool={setActiveTool}
+        onJumpToPage={setCurrentPageAndScroll}
+        onReorder={handleReorder}
+        onDeletePageAt={handleDeletePageAt}
+        onAddObject={handleAddObject}
+        onBatchUpdateObjects={handleBatchUpdateObjects}
+        onRequestSignature={() => setShowSignaturePad(true)}
+        onCropApply={handleCropApply}
+        onCropCancel={() => setActiveTool('select')}
+        onDropFile={loadFile}
+        onImagePlaced={handleImagePlaced}
+        onImagePlacementCancel={handleImagePlacementCancel}
+        onAskAva={handleAskAva}
+        onRunSuggestedAction={handleSuggestedAssistantAction}
+        assistantDockProps={{
+          introActions: assistantIntroActions,
+          actions: assistantSuggestedActions,
+          runHistory: assistantRunHistory,
+          hasDocument: !!renderDoc,
+          documentName: fileName,
+        }}
+      />
+    );
+  }
+
+  const shellRightPanel = assistantOpen && workspace !== 'review' ? (
+    <AssistantDock
+      onAsk={handleAskAva}
+      onRunSuggestedAction={handleSuggestedAssistantAction}
+      introActions={assistantIntroActions}
+      actions={assistantSuggestedActions}
+      runHistory={assistantRunHistory}
+      hasDocument={!!renderDoc}
+      documentName={fileName}
+    />
+  ) : null;
+
   return (
     <>
       {view === 'landing' ? (
         <LandingPage
-          onLaunchEditor={() => setView('editor')}
+          onLaunchEditor={() => {
+            setView('editor');
+            setWorkspace('inbox');
+          }}
           onDownloadDesktop={() => {
             window.open('https://github.com/jhalstead175/milpdf/releases', '_blank', 'noopener');
           }}
         />
       ) : (
-    <div className="app">
-      <div className="acrobat-topbar">
-        <div className="acrobat-tabs">
-          {SHELL_TABS.map((tab) => (
-            <button
-              key={tab}
-              className={`acrobat-tab ${panelTab === tab ? 'active' : ''}`}
-              onClick={() => togglePanelTab(tab)}
-            >
-              {tab.toUpperCase()}
-            </button>
-          ))}
-        </div>
-        <div className="acrobat-topbar-right">
-          <div className="acrobat-file-display" title={fileName}>
-            {fileName}
-          </div>
-          <div className="acrobat-zoom-controls">
-            <button onClick={() => runCommand('view.zoom.out')} disabled={!renderDoc || zoom <= 0.25}>-</button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button onClick={() => runCommand('view.zoom.in')} disabled={!renderDoc || zoom >= 3}>+</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="main-content">
-        {showV3 ? (
-          <V3AppShell />
-        ) : (
-          <div className={`editor-shell ${panelTab ? 'panel-open' : 'panel-closed'}`}>
-            <div className="tool-rail">
-              {TOOL_RAIL_ITEMS.map((item) => {
-                const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
-                const isActive = activeTool === mappedTool;
-                return (
-                  <button
-                    key={item.id}
-                    className={`tool-rail-button ${isActive ? 'active' : ''}`}
-                    onClick={() => handleRailToolClick(item.id)}
-                    title={item.label}
-                    disabled={!renderDoc || !pdfjsReady}
-                  >
-                    <span>{item.glyph}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className={`context-panel ${panelTab ? 'open' : ''}`}>
-              <div className="context-panel-header">
-                <span>{panelTab ? panelTab.toUpperCase() : ''}</span>
-                <button
-                  className="context-panel-collapse"
-                  onClick={() => setPanelTab(null)}
-                  title="Collapse panel"
-                  aria-label="Collapse panel"
-                >
-                  ◀
-                </button>
-              </div>
-              <div className="context-panel-body">
-                {panelTab === 'tools' && (
-                  <>
-                    {!renderDoc && (
-                        <div className="context-card">
-                          <div className="context-card-title">Open a PDF</div>
-                          <button className="btn-primary" onClick={handleOpen} disabled={!pdfjsReady}>Open Document</button>
-                        </div>
-                      )}
-                    <div className="context-card">
-                      <div className="context-card-title">Active Tool</div>
-                      <div className="context-tool-name">{activeToolConfig.title}</div>
-                      {activeToolConfig.fields.length === 0 ? (
-                        <div className="context-muted">No adjustable options for this tool.</div>
-                      ) : (
-                        activeToolConfig.fields.map((field) => {
-                          const value = toolDefaults[activeToolConfig.key]?.[field.key];
-                          return (
-                            <label key={field.key} className="context-field">
-                              <span>{field.label}</span>
-                              {field.type === 'color' ? (
-                                <input
-                                  type="color"
-                                  value={value}
-                                  onChange={(e) => handleToolDefaultChange(activeToolConfig.key, field.key, e.target.value)}
-                                />
-                              ) : (
-                                <>
-                                  <input
-                                    type="range"
-                                    min={field.min}
-                                    max={field.max}
-                                    step={field.step}
-                                    value={value}
-                                    onChange={(e) => handleToolDefaultChange(
-                                      activeToolConfig.key,
-                                      field.key,
-                                      Number(e.target.value)
-                                    )}
-                                  />
-                                  <strong>{value}</strong>
-                                </>
-                              )}
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                    {activeFormProfile && (
-                      <div className="context-card">
-                        <div className="context-card-title">Detected Form</div>
-                        <div className="context-tool-name">{activeFormProfile.name}</div>
-                        <div className="context-summary">Auto-fill available from the saved veteran profile.</div>
-                        <div className="context-actions">
-                          <button className="btn-secondary" onClick={() => setShowProfileModal(true)}>
-                            Edit Profile
-                          </button>
-                          <button className="btn-primary" onClick={handleAutoFill}>
-                            Auto-fill
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <div className="context-card">
-                      <div className="context-card-title">Document Actions</div>
-                      <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleOpen} disabled={!pdfjsReady}>Open</button>
-                        <button className="btn-secondary" onClick={handleInsertPdf} disabled={!renderDoc || !pdfjsReady}>Insert PDF</button>
-                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc || !pdfjsReady}>Save</button>
-                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc || !pdfjsReady}>Save As</button>
-                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc || !pdfjsReady}>Print</button>
-                        <button className="btn-secondary" onClick={handleImportImages} disabled={!renderDoc || !pdfjsReady}>Import Images</button>
-                        <button className="btn-secondary" onClick={() => setShowSignaturePad(true)} disabled={!renderDoc || !pdfjsReady}>Signature</button>
-                        <button className="btn-secondary" onClick={handleMerge} disabled={!renderDoc || !pdfjsReady}>Merge PDF</button>
-                        <button className="btn-secondary" onClick={() => setShowV3(prev => !prev)}>
-                          {showV3 ? 'Editor Shell' : 'V3 Shell'}
-                        </button>
-                      </div>
-                    </div>
-                    <LayersPanel
-                      objects={currentPageObjects}
-                      selectionIds={selectionIds}
-                      onSelectionChange={setSelection}
-                      onToggleVisible={handleToggleVisible}
-                      onToggleLocked={handleToggleLocked}
-                      onReorder={handleLayerReorder}
-                    />
-                    <InspectorPanel
-                      selectedObjects={selectedObjects}
-                      onUpdateObject={handleUpdateObject}
-                    />
-                  </>
-                )}
-
-                {panelTab === 'annotate' && (
-                  <>
-                    <div className="context-card">
-                      <div className="context-card-title">Current Page Annotations</div>
-                      {pageAnnotations.length === 0 ? (
-                        <div className="context-muted">No annotations on this page.</div>
-                      ) : (
-                        <div className="annotation-list">
-                          {pageAnnotations.map((obj) => (
-                            <div
-                              key={obj.id}
-                              className={`annotation-list-item ${selectionIds.includes(obj.id) ? 'selected' : ''}`}
-                            >
-                              <button
-                                className="annotation-select"
-                                onClick={() => {
-                                  setSelection([obj.id]);
-                                  setActiveTool('select');
-                                }}
-                              >
-                                <strong>{obj.type}</strong>
-                                <span>{getAnnotationSummary(obj)}</span>
-                              </button>
-                              <button
-                                className="annotation-delete-btn"
-                                onClick={() => handleDeleteObject(obj.id)}
-                                title="Delete annotation"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <EvidencePanel
-                      markers={evidenceIndex.markers}
-                      exhibits={evidenceIndex.exhibits}
-                      onJumpToPage={setCurrentPageAndScroll}
-                      onExportBundle={handleExportEvidenceBundle}
-                    />
-                    <CaseGraph
-                      graph={caseGraph}
-                      onNavigate={setCurrentPageAndScroll}
-                    />
-                    <AvaPanel onAsk={handleAskAva} />
-                  </>
-                )}
-
-                {panelTab === 'pages' && (
-                  <>
-                    <div className="context-card">
-                      <div className="context-card-title">Page Actions</div>
-                      <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleAddBlank} disabled={!renderDoc}>Insert Page</button>
-                        <button className="btn-secondary" onClick={handleInsertPdf} disabled={!renderDoc}>Insert PDF</button>
-                        <button className="btn-secondary" onClick={() => handleRotate(90)} disabled={!renderDoc}>Rotate 90</button>
-                        <button className="btn-secondary" onClick={handleDeletePage} disabled={!renderDoc || numPages <= 1}>Delete Current</button>
-                        <button className="btn-secondary" onClick={handleSplit} disabled={!renderDoc || numPages <= 1}>Split / Extract</button>
-                      </div>
-                    </div>
-                    <PageThumbnails
-                      renderDoc={renderDoc}
-                      numPages={numPages}
-                      currentPage={currentPage}
-                      onPageSelect={setCurrentPageAndScroll}
-                      onReorder={handleReorder}
-                      onDeletePage={handleDeletePageAt}
-                      showHeader={false}
-                    />
-                  </>
-                )}
-
-                {panelTab === 'export' && (
-                  <>
-                    <div className="context-card">
-                      <div className="context-card-title">Annotation Data</div>
-                      <div className="context-summary">Total annotations: <strong>{objects.length}</strong></div>
-                      <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleExportJson} disabled={!renderDoc}>Export JSON</button>
-                        <button className="btn-secondary" onClick={() => jsonInputRef.current?.click()} disabled={!renderDoc}>Import JSON</button>
-                      </div>
-                    </div>
-                    <div className="context-card">
-                      <div className="context-card-title">Document Export</div>
-                      <div className="context-actions">
-                        <button className="btn-secondary" onClick={handleSave} disabled={!renderDoc}>Save PDF</button>
-                        <button className="btn-secondary" onClick={handleSaveAs} disabled={!renderDoc}>Save As</button>
-                        <button className="btn-secondary" onClick={handleExportWord} disabled={!renderDoc}>Export Word</button>
-                        <button className="btn-secondary" onClick={handleWatermark} disabled={!renderDoc}>
-                          {watermarkText ? 'Remove Watermark' : 'Add Watermark'}
-                        </button>
-                        <button className="btn-secondary" onClick={handlePrint} disabled={!renderDoc}>Print</button>
-                        {import.meta.env?.DEV && (
-                          <button className="btn-secondary" onClick={handleKernelHealthCheck}>Kernel Health</button>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="canvas-stage">
-              <div className="canvas-scroll-container" onWheel={handleViewerWheel}>
-                <div className="canvas-stage-inner">
-                  <PDFViewer
-                    renderDoc={renderDoc}
-                    currentPage={currentPage}
-                    zoom={zoom}
-                    activeTool={activeTool}
-                    objects={objects}
-                    pageObjects={currentPageObjects}
-                    currentPageId={currentPageMeta?.id || null}
-                    layers={layers}
-                    selectionIds={selectionIds}
-                    onSelectionChange={setSelection}
-                    interactionState={interactionState}
-                    setInteractionState={setInteractionState}
-                    onAddObject={handleAddObject}
-                    onDeleteObject={handleDeleteObject}
-                    onUpdateObject={handleUpdateObject}
-                    onBatchUpdateObjects={handleBatchUpdateObjects}
-                    signatureDataUrl={signatureDataUrl}
-                    onRequestSignature={() => setShowSignaturePad(true)}
-                    onCropApply={handleCropApply}
-                    onCropCancel={() => setActiveTool('select')}
-                    onDropFile={loadFile}
-                    watermarkText={watermarkText}
-                    imagePlacement={imagePlacement}
-                    onImagePlaced={handleImagePlaced}
-                    onImagePlacementCancel={handleImagePlacementCancel}
-                    toolDefaults={toolDefaults}
-                    pdfjsReady={pdfjsReady}
-                  />
-                </div>
-              </div>
-              {renderDoc && (
-                <div className="canvas-page-pill">
-                  <button onClick={() => setCurrentPageAndScroll(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
-                  <span>{currentPage} / {numPages}</span>
-                  <button onClick={() => setCurrentPageAndScroll(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
-                </div>
+        <>
+          <div className="app">
+            <AppShell
+              nav={(
+                <PrimaryNav
+                  items={WORKSPACE_ITEMS}
+                  activeItem={workspace}
+                  onChange={setWorkspace}
+                />
               )}
-            </div>
-          </div>
-        )}
-      </div>
+              topbar={(
+                <GlobalTopBar
+                  workspaceLabel={workspaceLabel}
+                  matterName={matterName}
+                  documentName={fileName}
+                  saveState={unsavedChanges ? 'Unsaved' : 'Saved'}
+                  pageSummary={`${currentPage}/${numPages || 0}`}
+                  onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+                  onToggleAssistant={toggleAssistant}
+                  onSave={handleSave}
+                  onExport={() => setWorkspace('export')}
+                />
+              )}
+              main={workspaceContent}
+              rightPanel={shellRightPanel}
+              statusBar={(
+                <StatusBar
+                  page={currentPage}
+                  numPages={numPages}
+                  zoom={zoom}
+                  findingsCount={findingsCount}
+                  exportReady={exportReady}
+                  unsavedChanges={unsavedChanges}
+                />
+            )}
+          />
+        </div>
 
       {showSignaturePad && (
         <SignaturePad
@@ -1583,9 +1775,16 @@ const runDD214Analysis = useCallback(async () => {
         />
       )}
 
+      <ActionReviewModal
+        action={assistantActionProposal}
+        loading={loading}
+        onApprove={runAssistantAction}
+        onClose={() => setAssistantActionProposal(null)}
+      />
+
       <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
         commands={commands}
         onExecute={runCommand}
         hasDoc={!!renderDoc}
@@ -1698,13 +1897,21 @@ const runDD214Analysis = useCallback(async () => {
         onChange={handleImageFiles}
       />
       <input
+        ref={imagesToPdfInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        style={{ display: 'none' }}
+        onChange={handleImagesToPdfFiles}
+      />
+      <input
         ref={jsonInputRef}
         type="file"
         accept=".json,application/json"
         style={{ display: 'none' }}
         onChange={handleImportJson}
       />
-    </div>
+        </>
       )}
     </>
   );

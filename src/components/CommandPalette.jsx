@@ -1,3 +1,4 @@
+import { Search } from 'lucide-react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 export default function CommandPalette({ isOpen, onClose, commands, onExecute, hasDoc }) {
   const [query, setQuery] = useState('');
@@ -111,7 +112,7 @@ export default function CommandPalette({ isOpen, onClose, commands, onExecute, h
     <div className="cmd-backdrop" onClick={onClose}>
       <div className="cmd-palette" onClick={e => e.stopPropagation()}>
         <div className="cmd-input-row">
-          <span className="cmd-search-icon">⌕</span>
+          <Search className="cmd-search-icon" size={14} strokeWidth={1.9} />
           <input
             ref={inputRef}
             className="cmd-input"
