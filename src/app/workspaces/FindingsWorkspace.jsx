@@ -15,6 +15,7 @@ export default function FindingsWorkspace({
   onRejectFinding,
   onPromoteFinding,
   onJumpToPage,
+  nextActions = [],
 }) {
   const visibleFindings = findings.filter((finding) => (
     activeFilter === 'all' ? true : finding.status === activeFilter
@@ -40,6 +41,25 @@ export default function FindingsWorkspace({
         </div>
         <div className="findings-layout">
           <div className="findings-list">
+            <div className="context-card workflow-guidance-card">
+              <div className="context-card-title">Next Best Actions</div>
+              <div className="workflow-guidance-copy">
+                Resolve the highest-value review items first, then promote approved items into evidence.
+              </div>
+              <div className="workflow-action-list">
+                {nextActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    className={action.primary ? 'btn-primary' : 'btn-secondary'}
+                    onClick={action.onClick}
+                    disabled={action.disabled}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {visibleFindings.map((finding) => (
               <button
                 key={finding.id}

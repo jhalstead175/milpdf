@@ -193,10 +193,13 @@ function App() {
     setSelectedFindingId,
     acceptFinding,
     rejectFinding,
+    updateFinding,
   } = useFindingsStore();
   const [assistantRunHistory, setAssistantRunHistory] = useState([]);
   const [assistantActionProposal, setAssistantActionProposal] = useState(null);
   const [evidenceItems, setEvidenceItems] = useState([]);
+  const [workflowAuditTrail, setWorkflowAuditTrail] = useState([]);
+  const [exportReceipts, setExportReceipts] = useState([]);
 
   useEffect(() => {
     if (isElectron) setView('editor');
@@ -223,6 +226,28 @@ function App() {
 
   const dismissToast = useCallback((id) => {
     setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const appendWorkflowAction = useCallback((entry) => {
+    setWorkflowAuditTrail((prev) => [
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        occurredAt: new Date().toISOString(),
+        ...entry,
+      },
+      ...prev,
+    ].slice(0, 6));
+  }, []);
+
+  const appendExportReceipt = useCallback((entry) => {
+    setExportReceipts((prev) => [
+      {
+        id: `${Date.now()}-${Math.random()}`,
+        occurredAt: new Date().toISOString(),
+        ...entry,
+      },
+      ...prev,
+    ].slice(0, 8));
   }, []);
 
   useEffect(() => {
@@ -458,12 +483,25 @@ function App() {
       } else {
         await saveWithDialog(bytes, fileName);
       }
+      appendWorkflowAction({
+        label: `Saved ${fileName}`,
+        detail: `${fileName} was updated with the current review changes.`,
+      });
+      appendExportReceipt({
+        label: `PDF save completed`,
+        detail: `${fileName} was saved with current annotations and production edits.`,
+      });
+      pushToast({
+        type: 'success',
+        title: 'PDF Saved',
+        message: `${fileName} was updated with the current review changes.`,
+      });
     } catch (err) {
       alert('Failed to save PDF: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, fileName, watermarkText, layers, renderDoc]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, fileName, watermarkText, layers, renderDoc, pushToast]);
 
   const handleSaveAs = useCallback(async () => {
     if (!pdfBytes) return;
@@ -484,12 +522,25 @@ function App() {
       } else {
         await saveWithDialog(bytes, fileName);
       }
+      appendWorkflowAction({
+        label: `Saved a new copy of ${fileName}`,
+        detail: `A new production copy of ${fileName} is ready.`,
+      });
+      appendExportReceipt({
+        label: `Production copy created`,
+        detail: `A new saved copy of ${fileName} was prepared for delivery.`,
+      });
+      pushToast({
+        type: 'success',
+        title: 'Save As Complete',
+        message: `A new production copy of ${fileName} is ready.`,
+      });
     } catch (err) {
       alert('Failed to save PDF: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, fileName, watermarkText, layers, renderDoc]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, fileName, watermarkText, layers, renderDoc, pushToast]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -685,10 +736,23 @@ function App() {
         bytes = await addWatermark(bytes, watermarkText);
       }
       printPdf(bytes);
+      appendWorkflowAction({
+        label: 'Prepared print output',
+        detail: 'The current production PDF was prepared for printing.',
+      });
+      appendExportReceipt({
+        label: 'Print job prepared',
+        detail: 'A production-ready PDF was generated for printing.',
+      });
+      pushToast({
+        type: 'success',
+        title: 'Print Ready',
+        message: 'The production PDF was prepared for printing.',
+      });
     } finally {
       setLoading(false);
     }
-  }, [pdfBytes, objects, watermarkText, layers, renderDoc]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, watermarkText, layers, renderDoc, pushToast]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {
@@ -696,12 +760,25 @@ function App() {
     setLoading(true);
     try {
       await convertPdfToWord(renderDoc, fileName.replace(/\.pdf$/i, '.docx'));
+      appendWorkflowAction({
+        label: `Exported ${fileName.replace(/\.pdf$/i, '.docx')}`,
+        detail: `${fileName.replace(/\.pdf$/i, '.docx')} was generated from the current PDF.`,
+      });
+      appendExportReceipt({
+        label: 'Word export generated',
+        detail: `${fileName.replace(/\.pdf$/i, '.docx')} is ready for downstream editing or filing.`,
+      });
+      pushToast({
+        type: 'success',
+        title: 'Word Export Ready',
+        message: `${fileName.replace(/\.pdf$/i, '.docx')} was generated from the current PDF.`,
+      });
     } catch (err) {
       alert('Failed to export to Word: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [renderDoc, fileName]);
+  }, [appendExportReceipt, appendWorkflowAction, renderDoc, fileName, pushToast]);
 
   
 
@@ -988,31 +1065,98 @@ const runDD214Analysis = useCallback(async () => {
     ].slice(0, 8));
   }, []);
 
+  const proposedFindings = useMemo(
+    () => findings.filter((item) => item.status === 'proposed'),
+    [findings]
+  );
+  const acceptedFindings = useMemo(
+    () => findings.filter((item) => item.status === 'accepted'),
+    [findings]
+  );
+  const selectedFinding = useMemo(
+    () => findings.find((item) => item.id === selectedFindingId) || null,
+    [findings, selectedFindingId]
+  );
+  const lastWorkflowAction = workflowAuditTrail[0] || null;
+
+  const handleAcceptFinding = useCallback((findingId) => {
+    const finding = findings.find((item) => item.id === findingId);
+    if (!finding) return;
+    const previousStatus = finding.status;
+    acceptFinding(findingId);
+    appendWorkflowAction({
+      label: `Approved ${finding.title}`,
+      detail: `${finding.title} moved into the approved review set.`,
+      undoLabel: 'Undo approval',
+      onUndo: () => updateFinding(findingId, { status: previousStatus }),
+    });
+    pushToast({
+      type: 'success',
+      title: 'Review Item Approved',
+      message: `${finding.title} is approved and ready for the next workflow step.`,
+      actionLabel: 'Undo',
+      onAction: () => updateFinding(findingId, { status: previousStatus }),
+    });
+  }, [acceptFinding, appendWorkflowAction, findings, pushToast, updateFinding]);
+
+  const handleRejectFinding = useCallback((findingId) => {
+    const finding = findings.find((item) => item.id === findingId);
+    if (!finding) return;
+    const previousStatus = finding.status;
+    rejectFinding(findingId);
+    appendWorkflowAction({
+      label: `Excluded ${finding.title}`,
+      detail: `${finding.title} was removed from the production set.`,
+      undoLabel: 'Undo exclusion',
+      onUndo: () => updateFinding(findingId, { status: previousStatus }),
+    });
+    pushToast({
+      type: 'info',
+      title: 'Review Item Excluded',
+      message: `${finding.title} was excluded from the production set.`,
+      actionLabel: 'Undo',
+      onAction: () => updateFinding(findingId, { status: previousStatus }),
+    });
+  }, [appendWorkflowAction, findings, pushToast, rejectFinding, updateFinding]);
+
   const promoteFindingToEvidence = useCallback((findingId) => {
     const finding = findings.find((item) => item.id === findingId);
     if (!finding) return;
+    const previousStatus = finding.status;
+    const evidenceItem = {
+      id: nextPhase3Id('evidence'),
+      sourceFindingId: findingId,
+      title: finding.title,
+      summary: finding.summary,
+      page: finding.page,
+      type: finding.type,
+    };
 
-    acceptFinding(findingId);
+    handleAcceptFinding(findingId);
     setEvidenceItems((prev) => {
       if (prev.some((item) => item.sourceFindingId === findingId)) return prev;
-      return [
-        {
-          id: nextPhase3Id('evidence'),
-          sourceFindingId: findingId,
-          title: finding.title,
-          summary: finding.summary,
-          page: finding.page,
-          type: finding.type,
-        },
-        ...prev,
-      ];
+      return [evidenceItem, ...prev];
+    });
+    appendWorkflowAction({
+      label: `Promoted ${finding.title} to evidence`,
+      detail: `${finding.title} is now linked into the packet evidence set.`,
+      undoLabel: 'Undo promotion',
+      onUndo: () => {
+        updateFinding(findingId, { status: previousStatus });
+        setEvidenceItems((prev) => prev.filter((item) => item.sourceFindingId !== findingId));
+      },
     });
     pushToast({
       type: 'success',
       title: 'Evidence Added',
       message: `${finding.title} is ready for packet prep.`,
+      actionLabel: 'Undo',
+      onAction: () => {
+        updateFinding(findingId, { status: previousStatus });
+        setEvidenceItems((prev) => prev.filter((item) => item.sourceFindingId !== findingId));
+      },
     });
-  }, [acceptFinding, findings, pushToast]);
+  }, [appendWorkflowAction, findings, handleAcceptFinding, pushToast, updateFinding]);
 
   const runAssistantAction = useCallback(async (action) => {
     if (!action || (action.disabled && !renderDoc)) return;
@@ -1074,7 +1218,7 @@ const runDD214Analysis = useCallback(async () => {
           {
             id: nextPhase3Id('evidence'),
             sourceFindingId: finding.id,
-            title: `Exhibit Draft · Page ${currentPage}`,
+            title: `Exhibit Draft Ãƒâ€šÃ‚Â· Page ${currentPage}`,
             summary: finding.summary,
             page: currentPage,
             type: 'exhibit_note',
@@ -1424,7 +1568,7 @@ const runDD214Analysis = useCallback(async () => {
     const handler = (e) => {
       const inInput = !!e.target.closest('input,textarea,select');
       if (!inInput) {
-        // Ctrl+Shift+Z → redo (Mac/Linux convention alongside Ctrl+Y)
+        // Ctrl+Shift+Z -> redo (Mac/Linux convention alongside Ctrl+Y)
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') {
           e.preventDefault();
           redo();
@@ -1496,8 +1640,56 @@ const runDD214Analysis = useCallback(async () => {
 
   const matterName = activeFormProfile?.name || 'Current Matter';
   const findingsCount = pageAnnotations.length + evidenceIndex.markers.length + findings.filter((finding) => finding.status !== 'rejected').length;
-  const exportReady = !!renderDoc;
   const unsavedChanges = objects.length > 0;
+  const productionBlockers = useMemo(() => {
+    const blockers = [];
+
+    if (!renderDoc) {
+      blockers.push({
+        id: 'load-document',
+        label: 'Load a document before continuing to production export.',
+        actionLabel: 'Open PDF',
+        onAction: handleOpen,
+        disabled: !pdfjsReady,
+      });
+    }
+
+    if (proposedFindings.length > 0) {
+      blockers.push({
+        id: 'resolve-review-items',
+        label: `Resolve ${proposedFindings.length} review item${proposedFindings.length === 1 ? '' : 's'} before export.`,
+        actionLabel: 'Review Items',
+        onAction: () => setWorkspace('findings'),
+        disabled: false,
+      });
+    }
+
+    if (acceptedFindings.length > 0 && evidenceItems.length === 0) {
+      blockers.push({
+        id: 'link-evidence',
+        label: 'Link at least one approved review item into evidence.',
+        actionLabel: 'Open Packet',
+        onAction: () => setWorkspace('packet'),
+        disabled: false,
+      });
+    }
+
+    if (unsavedChanges) {
+      blockers.push({
+        id: 'save-changes',
+        label: 'Save document changes before creating the production copy.',
+        actionLabel: 'Save Now',
+        onAction: handleSave,
+        disabled: !renderDoc,
+      });
+    }
+
+    return blockers;
+  }, [acceptedFindings.length, evidenceItems.length, handleOpen, handleSave, pdfjsReady, proposedFindings.length, renderDoc, setWorkspace, unsavedChanges]);
+  const exportReady = productionBlockers.length === 0;
+  const readinessLabel = exportReady
+    ? 'Production-ready'
+    : `${productionBlockers.length} blocker${productionBlockers.length === 1 ? '' : 's'} to clear`;
   const reviewFindings = useMemo(
     () => findings.filter((finding) => finding.page === currentPage),
     [findings, currentPage]
@@ -1528,6 +1720,181 @@ const runDD214Analysis = useCallback(async () => {
       disabled: false,
     },
   ]), [handleOpen, pdfjsReady, renderDoc, runAutoRedact, setWorkspace]);
+
+  const findingsNextActions = useMemo(() => {
+    const nextOpenFinding = proposedFindings[0] || null;
+
+    return [
+      {
+        label: selectedFinding?.status === 'proposed' ? 'Approve Selected Item' : 'Review Next Open Item',
+        primary: true,
+        onClick: () => {
+          if (selectedFinding?.status === 'proposed') {
+            handleAcceptFinding(selectedFinding.id);
+            return;
+          }
+          if (nextOpenFinding) setSelectedFindingId(nextOpenFinding.id);
+        },
+        disabled: !selectedFinding && !nextOpenFinding,
+      },
+      {
+        label: 'Promote Selected to Evidence',
+        onClick: () => selectedFinding && promoteFindingToEvidence(selectedFinding.id),
+        disabled: !selectedFinding || selectedFinding.status === 'rejected',
+      },
+      {
+        label: 'Return to Review Canvas',
+        onClick: () => {
+          if (selectedFinding?.page) setCurrentPageAndScroll(selectedFinding.page);
+          setWorkspace('review');
+        },
+        disabled: !renderDoc,
+      },
+      {
+        label: 'Open Packet Builder',
+        onClick: () => setWorkspace('packet'),
+        disabled: acceptedFindings.length === 0 && evidenceItems.length === 0,
+      },
+    ];
+  }, [acceptedFindings.length, evidenceItems.length, handleAcceptFinding, proposedFindings, promoteFindingToEvidence, renderDoc, selectedFinding, setCurrentPageAndScroll, setSelectedFindingId, setWorkspace]);
+
+  const packetNextActions = useMemo(() => ([
+    {
+      label: evidenceItems.length > 0 ? 'Open Export Workspace' : 'Link Evidence from Findings',
+      primary: true,
+      onClick: () => setWorkspace(evidenceItems.length > 0 ? 'export' : 'findings'),
+      disabled: evidenceItems.length === 0 && acceptedFindings.length === 0,
+    },
+    {
+      label: 'Review Approved Items',
+      onClick: () => setWorkspace('findings'),
+      disabled: findings.length === 0,
+    },
+    {
+      label: 'Open Evidence Board',
+      onClick: () => setWorkspace('evidence'),
+      disabled: evidenceItems.length === 0,
+    },
+  ]), [acceptedFindings.length, evidenceItems.length, findings.length, setWorkspace]);
+
+  const exportNextActions = useMemo(() => ([
+    {
+      label: renderDoc ? 'Save Production PDF' : 'Open PDF',
+      primary: true,
+      onClick: renderDoc ? handleSave : handleOpen,
+      disabled: renderDoc ? false : !pdfjsReady,
+    },
+    {
+      label: watermarkText ? 'Review Watermark' : 'Add Watermark',
+      onClick: handleWatermark,
+      disabled: !renderDoc,
+    },
+    {
+      label: 'Export Word Copy',
+      onClick: handleExportWord,
+      disabled: !renderDoc,
+    },
+    {
+      label: 'Print Production Copy',
+      onClick: handlePrint,
+      disabled: !renderDoc,
+    },
+  ]), [handleExportWord, handleOpen, handlePrint, handleSave, handleWatermark, pdfjsReady, renderDoc, watermarkText]);
+
+  const quickStartSteps = useMemo(() => ([
+    {
+      id: 'open',
+      index: '01',
+      title: renderDoc ? 'Document loaded' : 'Open a PDF',
+      description: renderDoc
+        ? `${fileName} is ready for review.`
+        : 'Load a PDF or create one from images to start the workbench.',
+      status: renderDoc ? 'complete' : 'current',
+      statusLabel: renderDoc ? 'Complete' : 'Start here',
+      actionLabel: renderDoc ? 'Open another PDF' : 'Open PDF',
+      onAction: handleOpen,
+      disabled: !pdfjsReady,
+      primary: !renderDoc,
+    },
+    {
+      id: 'review',
+      index: '02',
+      title: proposedFindings.length > 0 ? 'Resolve review items' : 'Review and annotate',
+      description: proposedFindings.length > 0
+        ? `${proposedFindings.length} review item${proposedFindings.length === 1 ? '' : 's'} are waiting for a decision.`
+        : 'Use markup, notes, and AI review to capture what matters on the page.',
+      status: !renderDoc ? 'upcoming' : proposedFindings.length > 0 ? 'current' : 'complete',
+      statusLabel: !renderDoc ? 'Waiting' : proposedFindings.length > 0 ? 'In progress' : 'Ready',
+      actionLabel: proposedFindings.length > 0 ? 'Open review items' : 'Open review workspace',
+      onAction: () => setWorkspace(proposedFindings.length > 0 ? 'findings' : 'review'),
+      disabled: !renderDoc,
+      primary: !!renderDoc && proposedFindings.length > 0,
+    },
+    {
+      id: 'packet',
+      index: '03',
+      title: evidenceItems.length > 0 ? 'Packet building ready' : 'Promote key evidence',
+      description: evidenceItems.length > 0
+        ? `${evidenceItems.length} evidence item${evidenceItems.length === 1 ? '' : 's'} are ready for packet assembly.`
+        : 'Turn approved findings into evidence before assembling the packet.',
+      status: !renderDoc ? 'upcoming' : evidenceItems.length > 0 ? 'complete' : acceptedFindings.length > 0 ? 'current' : 'upcoming',
+      statusLabel: !renderDoc ? 'Waiting' : evidenceItems.length > 0 ? 'Complete' : acceptedFindings.length > 0 ? 'Next step' : 'Waiting',
+      actionLabel: evidenceItems.length > 0 ? 'Open packet builder' : 'Open findings',
+      onAction: () => setWorkspace(evidenceItems.length > 0 ? 'packet' : 'findings'),
+      disabled: !renderDoc || (acceptedFindings.length === 0 && evidenceItems.length === 0),
+      primary: !!renderDoc && acceptedFindings.length > 0 && evidenceItems.length === 0,
+    },
+    {
+      id: 'export',
+      index: '04',
+      title: exportReady ? 'Production export ready' : 'Clear production blockers',
+      description: exportReady
+        ? 'Save, print, or export a production copy with confidence.'
+        : `${productionBlockers.length} blocker${productionBlockers.length === 1 ? '' : 's'} still need attention before export.`,
+      status: !renderDoc ? 'upcoming' : exportReady ? 'complete' : 'current',
+      statusLabel: !renderDoc ? 'Waiting' : exportReady ? 'Complete' : 'Must clear',
+      actionLabel: exportReady ? 'Open export workspace' : 'Review blockers',
+      onAction: () => setWorkspace(exportReady ? 'export' : 'packet'),
+      disabled: !renderDoc,
+      primary: !!renderDoc && exportReady,
+    },
+  ]), [acceptedFindings.length, evidenceItems.length, exportReady, fileName, handleOpen, pdfjsReady, productionBlockers.length, proposedFindings.length, renderDoc, setWorkspace]);
+
+  const starterWorkflows = useMemo(() => ([
+    {
+      id: 'review-packet',
+      title: 'Review a legal packet',
+      description: 'Open a PDF, move through review, and leave with a production-safe export path.',
+      duration: '3 min',
+      outcome: renderDoc ? 'Resume the active matter in the review workspace.' : 'Start by loading a packet or claim file.',
+      actionLabel: renderDoc ? 'Continue review' : 'Open PDF',
+      onAction: renderDoc ? () => setWorkspace('review') : handleOpen,
+      disabled: renderDoc ? false : !pdfjsReady,
+      primary: true,
+    },
+    {
+      id: 'ai-review',
+      title: 'Run AI review on the current matter',
+      description: 'Use MilPDF to summarize pages, extract dates, and stage review items before packet work begins.',
+      duration: '2 min',
+      outcome: renderDoc ? 'Launch the AI review flow against the loaded document.' : 'Load a document first, then use Ava to generate guided findings.',
+      actionLabel: renderDoc ? 'Run AI review' : 'Load document first',
+      onAction: renderDoc ? () => handleSuggestedAssistantAction('extract_dates') : handleOpen,
+      disabled: renderDoc ? false : !pdfjsReady,
+      primary: false,
+    },
+    {
+      id: 'image-intake',
+      title: 'Build a PDF from scans',
+      description: 'Convert photos or scanned pages into a single PDF, then move straight into review and export.',
+      duration: '2 min',
+      outcome: 'Ideal for intake packets that arrive as phone photos or loose scans.',
+      actionLabel: 'Create PDF from images',
+      onAction: handleCreatePdfFromImages,
+      disabled: false,
+      primary: false,
+    },
+  ]), [handleCreatePdfFromImages, handleOpen, handleSuggestedAssistantAction, pdfjsReady, renderDoc, setWorkspace]);
 
   const pdfWorkbenchTools = useMemo(() => ([
     {
@@ -1579,6 +1946,8 @@ const runDD214Analysis = useCallback(async () => {
         evidenceItems={evidenceItems}
         suggestedActions={assistantSuggestedActions}
         toolGroups={pdfWorkbenchTools}
+        quickStartSteps={quickStartSteps}
+        starterWorkflows={starterWorkflows}
         onOpenDocument={handleOpen}
         onCreatePdfFromImages={handleCreatePdfFromImages}
         onGoReview={() => setWorkspace('review')}
@@ -1594,9 +1963,10 @@ const runDD214Analysis = useCallback(async () => {
         selectedFindingId={selectedFindingId}
         onFilterChange={setFindingsFilter}
         onSelectFinding={setSelectedFindingId}
-        onAcceptFinding={acceptFinding}
-        onRejectFinding={rejectFinding}
+        onAcceptFinding={handleAcceptFinding}
+        onRejectFinding={handleRejectFinding}
         onPromoteFinding={promoteFindingToEvidence}
+        nextActions={findingsNextActions}
         onJumpToPage={(page) => {
           setCurrentPageAndScroll(page);
           setWorkspace('review');
@@ -1620,6 +1990,9 @@ const runDD214Analysis = useCallback(async () => {
         findings={findings}
         evidenceItems={evidenceItems}
         onGoExport={() => setWorkspace('export')}
+        nextActions={packetNextActions}
+        blockers={productionBlockers}
+        readinessLabel={readinessLabel}
       />
     );
   } else if (workspace === 'export') {
@@ -1638,6 +2011,11 @@ const runDD214Analysis = useCallback(async () => {
         onInsertPdfPages={handleInsertPdfPages}
         onCreatePdfFromImages={handleCreatePdfFromImages}
         onRunHealthCheck={handleKernelHealthCheck}
+        nextActions={exportNextActions}
+        blockers={productionBlockers}
+        readinessLabel={readinessLabel}
+        activityLog={workflowAuditTrail}
+        exportReceipts={exportReceipts}
       />
     );
   } else {
@@ -1747,6 +2125,9 @@ const runDD214Analysis = useCallback(async () => {
                   documentName={fileName}
                   saveState={unsavedChanges ? 'Unsaved' : 'Saved'}
                   pageSummary={`${currentPage}/${numPages || 0}`}
+                  readinessLabel={readinessLabel}
+                  blockerCount={productionBlockers.length}
+                  lastAction={lastWorkflowAction}
                   onOpenCommandPalette={() => setCommandPaletteOpen(true)}
                   onToggleAssistant={toggleAssistant}
                   onSave={handleSave}
@@ -1763,6 +2144,9 @@ const runDD214Analysis = useCallback(async () => {
                   findingsCount={findingsCount}
                   exportReady={exportReady}
                   unsavedChanges={unsavedChanges}
+                  blockerCount={productionBlockers.length}
+                  readinessLabel={readinessLabel}
+                  lastAction={lastWorkflowAction}
                 />
             )}
           />

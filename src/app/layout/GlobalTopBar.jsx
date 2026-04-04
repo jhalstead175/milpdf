@@ -4,6 +4,9 @@ export default function GlobalTopBar({
   documentName,
   saveState,
   pageSummary,
+  readinessLabel,
+  blockerCount = 0,
+  lastAction,
   onOpenCommandPalette,
   onToggleAssistant,
   onSave,
@@ -20,6 +23,11 @@ export default function GlobalTopBar({
             {documentName}
           </span>
         </div>
+        {lastAction ? (
+          <div className="global-topbar-last-action" title={lastAction.detail || lastAction.label}>
+            Last action: {lastAction.label}
+          </div>
+        ) : null}
       </div>
 
       <div className="global-topbar-actions">
@@ -28,6 +36,7 @@ export default function GlobalTopBar({
         </button>
         <div className="global-topbar-status">
           <span className="status-pill">{saveState}</span>
+          <span className={`status-pill ${blockerCount > 0 ? 'warning' : 'ready'}`}>{readinessLabel}</span>
           <span className="status-pill subtle">{pageSummary}</span>
         </div>
         <button type="button" className="btn-secondary" onClick={onToggleAssistant}>

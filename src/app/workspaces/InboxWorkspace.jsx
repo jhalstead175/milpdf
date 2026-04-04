@@ -6,6 +6,8 @@ export default function InboxWorkspace({
   evidenceItems = [],
   suggestedActions = [],
   toolGroups = [],
+  quickStartSteps = [],
+  starterWorkflows = [],
   onOpenDocument,
   onCreatePdfFromImages,
   onGoReview,
@@ -16,6 +18,58 @@ export default function InboxWorkspace({
 
   return (
     <section className="workspace-screen workspace-grid-two phase3-inbox">
+      <div className="context-card context-card-span-2 quickstart-card">
+        <div className="context-card-title">3-Minute First Success</div>
+        <div className="quickstart-lead">
+          Move from intake to a production-ready PDF with a guided path that surfaces the next useful step.
+        </div>
+        <div className="quickstart-grid">
+          {quickStartSteps.map((step) => (
+            <div key={step.id} className={`quickstart-step quickstart-step-${step.status}`}>
+              <div className="quickstart-step-top">
+                <span className="quickstart-step-index">{step.index}</span>
+                <span className="quickstart-step-status">{step.statusLabel}</span>
+              </div>
+              <strong>{step.title}</strong>
+              <p>{step.description}</p>
+              <button
+                type="button"
+                className={step.primary ? 'btn-primary' : 'btn-secondary'}
+                onClick={step.onAction}
+                disabled={step.disabled}
+              >
+                {step.actionLabel}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="context-card context-card-span-2">
+        <div className="context-card-title">Starter Workflows</div>
+        <div className="starter-workflow-grid">
+          {starterWorkflows.map((workflow) => (
+            <section key={workflow.id} className="starter-workflow-card">
+              <div className="starter-workflow-top">
+                <div>
+                  <h3>{workflow.title}</h3>
+                  <p>{workflow.description}</p>
+                </div>
+                <span className="tool-group-pill">{workflow.duration}</span>
+              </div>
+              <div className="starter-workflow-meta">{workflow.outcome}</div>
+              <button
+                type="button"
+                className={workflow.primary ? 'btn-primary' : 'btn-secondary'}
+                onClick={workflow.onAction}
+                disabled={workflow.disabled}
+              >
+                {workflow.actionLabel}
+              </button>
+            </section>
+          ))}
+        </div>
+      </div>
       <div className="context-card">
         <div className="context-card-title">Matter Intake</div>
         <div className="workspace-metric-grid">

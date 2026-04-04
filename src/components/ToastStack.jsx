@@ -15,6 +15,18 @@ export default function ToastStack({ toasts, onDismiss }) {
         <div key={t.id} className={`toast toast-${t.type || 'info'}`}>
           <div className="toast-title">{t.title}</div>
           {t.message && <div className="toast-message">{t.message}</div>}
+          {t.actionLabel ? (
+            <button
+              type="button"
+              className="toast-action"
+              onClick={() => {
+                t.onAction?.();
+                onDismiss(t.id);
+              }}
+            >
+              {t.actionLabel}
+            </button>
+          ) : null}
         </div>
       ))}
     </div>
