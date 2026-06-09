@@ -46,7 +46,6 @@ import { buildShortcutMap, eventToShortcut } from './core/commands/executor';
 import { buildEvidenceIndex } from './core/evidence';
 import { buildCaseGraph } from './core/caseGraph';
 import { buildCaseContext, askAva } from './core/ai';
-import { createKernel, CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG } from './core/kernel';
 import './App.css';
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI?.isElectron;
@@ -171,7 +170,6 @@ function buildAssistantActionCatalog({ currentPage, hasDocument }) {
 
 function App() {
   const [view, setView] = useState('landing');
-  const kernel = useMemo(() => createKernel(), []);
   const [toasts, setToasts] = useState([]);
   const [pdfjsReady, setPdfjsReady] = useState(false);
   const {
@@ -205,10 +203,6 @@ function App() {
     if (isElectron) setView('editor');
     if (isElectron) setWorkspace('review');
   }, [setWorkspace]);
-
-  useEffect(() => {
-    kernel.init(CORE_MODULES, PLUGIN_CONFIG, PLUGIN_CATALOG);
-  }, [kernel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,27 +244,6 @@ function App() {
     ].slice(0, 8));
   }, []);
 
-  useEffect(() => {
-    const offLoaded = kernel.eventBus.on('document:loaded', ({ pages }) => {
-      pushToast({ type: 'info', title: 'Document Loaded', message: `${pages} pages ready.` });
-    });
-    const offAnn = kernel.eventBus.on('annotation:created', ({ object }) => {
-      pushToast({ type: 'info', title: 'Annotation Added', message: object?.type || 'Annotation' });
-    });
-    const offEvidence = kernel.eventBus.on('evidence:created', ({ object }) => {
-      pushToast({ type: 'success', title: 'Evidence Marker', message: object?.label || 'Evidence marker created.' });
-    });
-    const offTimeline = kernel.eventBus.on('timeline:updated', () => {
-      pushToast({ type: 'info', title: 'Timeline Updated' });
-    });
-    return () => {
-      offLoaded();
-      offAnn();
-      offEvidence();
-      offTimeline();
-    };
-  }, [kernel, pushToast]);
-
   // When switching to editor, lock body scroll and reset scroll position
   useEffect(() => {
     if (view === 'editor') {
@@ -289,8 +262,6 @@ function App() {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const renderDocRef = useRef(null);
-  const [showHealthModal, setShowHealthModal] = useState(false);
-  const [healthReport, setHealthReport] = useState(null);
   const editorStore = useEditorStore([]);
   const {
     objects,
@@ -406,11 +377,13 @@ function App() {
     setRenderDoc(result.renderDoc);
     setNumPages(result.pdfDoc.getPageCount());
     setPageMeta(nextPageMeta);
-    kernel.eventBus.emit('document:loaded', {
-      pages: result.pdfDoc.getPageCount(),
+    pushToast({
+      type: 'info',
+      title: 'Document Loaded',
+      message: `${result.pdfDoc.getPageCount()} pages ready.`,
     });
     return nextPageMeta;
-  }, [pageMeta, setPageMeta, kernel]);
+  }, [pageMeta, setPageMeta, pushToast]);
 
   // --- Load a PDF from ArrayBuffer + name ---
   const loadFromBuffer = useCallback(async (buffer, name) => {
@@ -846,12 +819,12 @@ const runDD214Analysis = useCallback(async () => {
   const handleAddObject = useCallback((obj) => {
     const nextObject = obj.pageId || !currentPageMeta?.id ? obj : { ...obj, pageId: currentPageMeta.id };
     addObject(nextObject);
-    kernel.eventBus.emit('annotation:created', { object: nextObject });
+    pushToast({ type: 'info', title: 'Annotation Added', message: nextObject?.type || 'Annotation' });
     if (nextObject?.type === 'evidenceMarker') {
-      kernel.eventBus.emit('evidence:created', { object: nextObject });
-      if (nextObject.timestamp) kernel.eventBus.emit('timeline:updated', { object: nextObject });
+      pushToast({ type: 'success', title: 'Evidence Marker', message: nextObject?.label || 'Evidence marker created.' });
+      if (nextObject.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
     }
-  }, [addObject, currentPageMeta, kernel]);
+  }, [addObject, currentPageMeta, pushToast]);
 
   const handleAddObjects = useCallback((newObjects) => {
     const normalizedObjects = newObjects.map((obj) => (
@@ -861,13 +834,13 @@ const runDD214Analysis = useCallback(async () => {
     ));
     addObjects(normalizedObjects);
     normalizedObjects.forEach(obj => {
-      kernel.eventBus.emit('annotation:created', { object: obj });
+      pushToast({ type: 'info', title: 'Annotation Added', message: obj?.type || 'Annotation' });
       if (obj?.type === 'evidenceMarker') {
-        kernel.eventBus.emit('evidence:created', { object: obj });
-        if (obj.timestamp) kernel.eventBus.emit('timeline:updated', { object: obj });
+        pushToast({ type: 'success', title: 'Evidence Marker', message: obj?.label || 'Evidence marker created.' });
+        if (obj.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
       }
     });
-  }, [addObjects, currentPage, currentPageMeta, kernel]);
+  }, [addObjects, currentPage, currentPageMeta, pushToast]);
 
   const runAutoRedact = useCallback(async () => {
     if (!renderDoc) return;
@@ -1014,8 +987,8 @@ const runDD214Analysis = useCallback(async () => {
 
   const handleUpdateObject = useCallback((id, updates) => {
     updateObject(id, updates);
-    if (updates?.timestamp) kernel.eventBus.emit('timeline:updated', { id, updates });
-  }, [updateObject, kernel]);
+    if (updates?.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
+  }, [updateObject, pushToast]);
 
   const handleBatchUpdateObjects = useCallback((patches) => {
     batchUpdateObjects(patches);
@@ -1257,16 +1230,6 @@ const runDD214Analysis = useCallback(async () => {
     setSelectedFindingId,
     setWorkspace,
   ]);
-
-  const handleKernelHealthCheck = useCallback(() => {
-    try {
-      const report = kernel.commandBus.execute('plugin.health.check');
-      setHealthReport(report || { services: [], timestamp: new Date().toISOString() });
-      setShowHealthModal(true);
-    } catch (err) {
-      pushToast({ type: 'info', title: 'Kernel Health', message: err.message });
-    }
-  }, [kernel, pushToast]);
 
   useEffect(() => {
     setSelection(prev => prev.filter(id => objects.some(o => o.id === id)));
@@ -1516,28 +1479,19 @@ const runDD214Analysis = useCallback(async () => {
     redo,
     openProfile: () => setShowProfileModal(true),
     autoFillProfile: handleAutoFill,
-    runKernelHealthCheck: handleKernelHealthCheck,
   }), [renderDoc, setActiveTool, handleToolChange, handleOpen, handleSave, handleSaveAs, handleMerge, handleSplit, handleRotate,
     handleAddBlank, handleDeletePage, handlePrint, handleExportWord, handleWatermark, handleImportImages,
     handleCreatePdfFromImages, handleInsertPdfPages, signatureDataUrl, setZoom, setCurrentPage, numPages,
     setActiveWorkflow, runDD214Analysis, runAutoRedact, handleAlignment, handleZOrder, handleCopy,
     handlePaste, handleDuplicate, undo, redo, handleAutoFill, setShowProfileModal,
-    handleKernelHealthCheck, setCommandPaletteOpen]);
+    setCommandPaletteOpen]);
 
   const commands = useMemo(() => buildCommandRegistry(commandContext), [commandContext]);
 
-  useEffect(() => {
-    commands.forEach(cmd => {
-      kernel.commandBus.register(cmd.id, () => cmd.execute(commandContext));
-    });
-    return () => {
-      commands.forEach(cmd => kernel.commandBus.unregister(cmd.id));
-    };
-  }, [commands, commandContext, kernel]);
-
   const runCommand = useCallback((id) => {
-    kernel.commandBus.execute(id);
-  }, [kernel]);
+    const cmd = commands.find((c) => c.id === id);
+    cmd?.execute(commandContext);
+  }, [commands, commandContext]);
 
   const shortcutMap = useMemo(() => buildShortcutMap(commands), [commands]);
 
@@ -2010,7 +1964,6 @@ const runDD214Analysis = useCallback(async () => {
         onPrint={handlePrint}
         onInsertPdfPages={handleInsertPdfPages}
         onCreatePdfFromImages={handleCreatePdfFromImages}
-        onRunHealthCheck={handleKernelHealthCheck}
         nextActions={exportNextActions}
         blockers={productionBlockers}
         readinessLabel={readinessLabel}
@@ -2180,29 +2133,6 @@ const runDD214Analysis = useCallback(async () => {
           onSave={handleProfileSave}
           onClose={() => setShowProfileModal(false)}
         />
-      )}
-
-      {showHealthModal && (
-        <div className="modal-backdrop" onClick={() => setShowHealthModal(false)}>
-          <div className="modal health-modal" onClick={e => e.stopPropagation()}>
-            <h3>Kernel Health Check</h3>
-            <p className="modal-hint">Services registered in the kernel.</p>
-            <div className="health-services">
-              {(healthReport?.services || []).map((service) => (
-                <div key={service} className="health-service-item">{service}</div>
-              ))}
-              {(healthReport?.services || []).length === 0 && (
-                <div className="health-service-item empty">No services reported.</div>
-              )}
-            </div>
-            <div className="health-timestamp">
-              Last check: {healthReport?.timestamp || 'unknown'}
-            </div>
-            <div className="modal-actions">
-              <button className="btn-primary" onClick={() => setShowHealthModal(false)}>Close</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {activeWorkflow === 'evidence-builder' && (

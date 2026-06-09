@@ -313,16 +313,5 @@ export function buildCommandRegistry(ctx) {
     },
   ];
 
-  if (import.meta.env?.DEV) {
-    commands.push({
-      id: 'kernel.health',
-      label: 'Kernel Health Check',
-      shortcut: null,
-      keywords: ['kernel', 'health', 'diagnostics'],
-      category: 'Diagnostics',
-      execute: () => ctx.runKernelHealthCheck?.(),
-    });
-  }
-
   return commands;
 }

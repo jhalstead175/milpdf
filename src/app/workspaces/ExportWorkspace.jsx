@@ -11,7 +11,6 @@ export default function ExportWorkspace({
   onPrint,
   onInsertPdfPages,
   onCreatePdfFromImages,
-  onRunHealthCheck,
   nextActions = [],
   blockers = [],
   readinessLabel,
@@ -133,9 +132,6 @@ export default function ExportWorkspace({
             {watermarkText ? 'Remove Watermark' : 'Add Watermark'}
           </button>
           <button className="btn-secondary" onClick={onPrint} disabled={!renderDoc}>Print</button>
-          {import.meta.env?.DEV && (
-            <button className="btn-secondary" onClick={onRunHealthCheck}>Kernel Health</button>
-          )}
         </div>
       </div>
     </section>

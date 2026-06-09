@@ -2067,39 +2067,6 @@ html.editor-active #root {
   outline: none;
 }
 
-/* ===== Kernel Health Modal ===== */
-.health-modal {
-  width: 360px;
-}
-
-.health-services {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 220px;
-  overflow-y: auto;
-  margin-top: 10px;
-  margin-bottom: 12px;
-}
-
-.health-service-item {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #11111b;
-  border: 1px solid #313244;
-  color: #cdd6f4;
-  font-size: 12px;
-}
-
-.health-service-item.empty {
-  color: #6c7086;
-}
-
-.health-timestamp {
-  font-size: 11px;
-  color: #6c7086;
-}
-
 /* ===== Ava Panel Avatar ===== */
 .ava-avatar-row {
   display: flex;
