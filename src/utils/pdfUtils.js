@@ -342,6 +342,57 @@ export async function cropPage(pdfDoc, pageIndex, cropBox) {
  * @param {object}     renderDoc     PDF.js document (used to render pages)
  * @param {object}     [options]     Forwarded to embedEditorObjects
  */
+/**
+ * Re-embed a page's text as an INVISIBLE, searchable/selectable layer, excluding
+ * any text that intersects a redaction rectangle.
+ *
+ * The page has already been flattened to a raster image (all original content
+ * streams destroyed), so the sensitive content is gone. This restores search,
+ * copy, and accessibility for everything that was NOT redacted — without ever
+ * re-introducing redacted text. Coordinates are PDF points (bottom-left origin),
+ * matching pdf.js text-item transforms and pdf-lib's drawing space.
+ *
+ * Safety bias: a text item that touches a redaction rect at all is dropped
+ * entirely. Better to lose a word's searchability than to leak redacted content.
+ */
+async function embedSearchableTextLayer(page, pdfPage, redactRects, font) {
+  let textContent;
+  try {
+    textContent = await pdfPage.getTextContent();
+  } catch {
+    return; // no extractable text (e.g. already-scanned page) — nothing to restore
+  }
+
+  for (const item of textContent.items) {
+    const str = item.str;
+    if (!str || !str.trim()) continue;
+
+    const t = item.transform; // [a, b, c, d, e, f]
+    const x = t[4];
+    const yBaseline = t[5];
+    const size = Math.hypot(t[2], t[3]) || item.height || 10;
+    const w = item.width || str.length * size * 0.5;
+
+    // Generous item bbox (a touch below baseline for descenders, up to ascent).
+    const box = {
+      x0: x,
+      y0: yBaseline - size * 0.25,
+      x1: x + w,
+      y1: yBaseline + size,
+    };
+    const touchesRedaction = redactRects.some((r) =>
+      !(box.x1 <= r.x0 || box.x0 >= r.x1 || box.y1 <= r.y0 || box.y0 >= r.y1)
+    );
+    if (touchesRedaction) continue;
+
+    try {
+      page.drawText(str, { x, y: yBaseline, size, font, opacity: 0 });
+    } catch {
+      // Standard font can't encode this glyph — skip it. Never re-add redacted text.
+    }
+  }
+}
+
 export async function secureEmbed(currentBytes, objects, layers, renderDoc, options = {}) {
   // Which page numbers have secure objects?
   const securePageNumbers = new Set(
@@ -360,6 +411,7 @@ export async function secureEmbed(currentBytes, objects, layers, renderDoc, opti
 
   // Build a new PDF: secure pages → rasterized image, others → copy as-is
   const outDoc = await PDFDocument.create();
+  const searchFont = await outDoc.embedFont(StandardFonts.Helvetica);
 
   for (let i = 0; i < srcPages.length; i++) {
     const pageNum   = i + 1;
@@ -394,6 +446,12 @@ export async function secureEmbed(currentBytes, objects, layers, renderDoc, opti
     // Fresh blank page — NO original content streams survive
     const newPage = outDoc.addPage([width, height]);
     newPage.drawImage(pngImage, { x: 0, y: 0, width, height });
+
+    // Restore searchability for the non-redacted text via an invisible layer.
+    const redactRects = objects
+      .filter((o) => REDACT_TYPES.has(o.type) && o.page === pageNum)
+      .map((o) => ({ x0: o.pdfX, y0: o.pdfY, x1: o.pdfX + o.width, y1: o.pdfY + o.height }));
+    await embedSearchableTextLayer(newPage, pdfPage, redactRects, searchFont);
   }
 
   return new Uint8Array(await outDoc.save());
