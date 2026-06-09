@@ -1,3 +1,5 @@
+import { createImageObject } from '../../engine/DocumentModel';
+
 export function createImageTool(ctx) {
   const {
     imagePlacement,
@@ -74,11 +76,11 @@ export function createImageTool(ctx) {
       if (!rect) return;
 
       const pdfRect = screenRectToPdf(rect.x, rect.y, rect.width, rect.height);
-      onAddObject(createBaseObject('image', pdfRect, 'markup', {
+      onAddObject(createImageObject(createBaseObject('image', pdfRect, 'markup', {
         dataUrl: imagePlacement.dataUrl,
         name: imagePlacement.name || 'image',
         opacity: 1,
-      }));
+      })));
       onImagePlaced?.();
     },
 

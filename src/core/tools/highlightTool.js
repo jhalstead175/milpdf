@@ -1,3 +1,5 @@
+import { createHighlightObject } from '../../engine/DocumentModel';
+
 export function createHighlightTool(ctx) {
   const {
     setHighlightStart, setHighlightRect, highlightStart, highlightRect,
@@ -24,10 +26,10 @@ export function createHighlightTool(ctx) {
     onMouseUp() {
       if (highlightRect && highlightRect.width > 5 && highlightRect.height > 5) {
         const rect = screenRectToPdf(highlightRect.x, highlightRect.y, highlightRect.width, highlightRect.height);
-        onAddObject(createBaseObject('highlight', rect, 'annotations', {
+        onAddObject(createHighlightObject(createBaseObject('highlight', rect, 'annotations', {
           color: toolDefaults.highlight?.color || '#c9a84c',
           opacity: toolDefaults.highlight?.opacity || 0.35,
-        }));
+        })));
         setHighlightRect(null);
       }
       setHighlightStart(null);

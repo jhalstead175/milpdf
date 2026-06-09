@@ -1,3 +1,5 @@
+import { createSignatureObject } from '../../engine/DocumentModel';
+
 export function createSignatureTool(ctx) {
   const {
     signatureDataUrl, onRequestSignature,
@@ -11,7 +13,7 @@ export function createSignatureTool(ctx) {
         return;
       }
       const rect = screenRectToPdf(pos.x, pos.y, 200, 80);
-      onAddObject(createBaseObject('signature', rect, 'annotations', { dataUrl: signatureDataUrl }));
+      onAddObject(createSignatureObject(createBaseObject('signature', rect, 'annotations', { dataUrl: signatureDataUrl })));
     },
   };
 }

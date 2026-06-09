@@ -71,8 +71,37 @@ export function createRectObject(props) {
   return baseObject('rect', 'overlay', props);
 }
 
+export function createHighlightObject(props) {
+  return baseObject('highlight', 'overlay', {
+    color: '#c9a84c',
+    opacity: 0.35,
+    ...props,
+  });
+}
+
+export function createDrawObject(props) {
+  return baseObject('drawing', 'overlay', {
+    pdfPoints: [],
+    color: '#000000',
+    lineWidth: 2,
+    ...props,
+  });
+}
+
+export function createSignatureObject(props) {
+  return baseObject('signature', 'overlay', {
+    dataUrl: null,
+    opacity: 1,
+    ...props,
+  });
+}
+
 export function createImageObject(props) {
-  return baseObject('image', 'overlay', props);
+  return baseObject('image', 'overlay', {
+    dataUrl: null,
+    opacity: 1,
+    ...props,
+  });
 }
 
 // --- Content objects (operate on original content — built later) ---

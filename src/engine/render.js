@@ -31,7 +31,7 @@ export function buildRenderList(page) {
         };
       }
 
-      if (obj.type === 'rect' || obj.type === 'redaction') {
+      if (obj.type === 'rect' || obj.type === 'redaction' || obj.type === 'highlight') {
         return {
           id: obj.id,
           type: obj.type,
@@ -39,18 +39,31 @@ export function buildRenderList(page) {
           y: obj.pdfY,
           width: obj.width,
           height: obj.height,
+          color: obj.color,
+          opacity: obj.opacity,
         };
       }
 
-      if (obj.type === 'image') {
+      if (obj.type === 'drawing') {
         return {
           id: obj.id,
-          type: 'image',
+          type: 'drawing',
+          points: obj.pdfPoints || obj.points || [],
+          color: obj.color,
+          lineWidth: obj.lineWidth,
+        };
+      }
+
+      if (obj.type === 'image' || obj.type === 'signature') {
+        return {
+          id: obj.id,
+          type: obj.type,
           x: obj.pdfX,
           y: obj.pdfY,
           width: obj.width,
           height: obj.height,
           dataUrl: obj.dataUrl,
+          opacity: obj.opacity,
         };
       }
 

@@ -1,3 +1,5 @@
+import { createDrawObject } from '../../engine/DocumentModel';
+
 export function createDrawTool(ctx) {
   const {
     setDrawingPoints, drawingPoints,
@@ -25,11 +27,11 @@ export function createDrawTool(ctx) {
           width: Math.max(...xs) - Math.min(...xs),
           height: Math.max(...ys) - Math.min(...ys),
         };
-        onAddObject(createBaseObject('drawing', rect, 'annotations', {
+        onAddObject(createDrawObject(createBaseObject('drawing', rect, 'annotations', {
           pdfPoints: drawingPoints,
           color: toolDefaults.draw?.color || '#000000',
           lineWidth: toolDefaults.draw?.lineWidth || 2,
-        }));
+        })));
       }
       setDrawingPoints(null);
     },
