@@ -27,6 +27,7 @@ import {
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
 import { secureEmbed } from './core/export';
+import { toEngineDocument, documentToEmbedObjects } from './engine/adapter';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -437,13 +438,20 @@ function App() {
     e.target.value = '';
   }, [loadFile]);
 
+  // Objects to embed at export time, with page assignment derived from page
+  // OWNERSHIP via the engine document — not from a possibly-stale obj.page.
+  const getExportObjects = useCallback(
+    () => documentToEmbedObjects(toEngineDocument(pageMeta, objects)),
+    [pageMeta, objects]
+  );
+
   const handleSave = useCallback(async () => {
     if (!pdfBytes) return;
     setLoading(true);
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
+        bytes = await secureEmbed(bytes, getExportObjects(), layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -474,7 +482,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, fileName, watermarkText, layers, renderDoc, pushToast]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, getExportObjects, fileName, watermarkText, layers, renderDoc, pushToast]);
 
   const handleSaveAs = useCallback(async () => {
     if (!pdfBytes) return;
@@ -482,7 +490,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
+        bytes = await secureEmbed(bytes, getExportObjects(), layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -513,7 +521,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, fileName, watermarkText, layers, renderDoc, pushToast]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, getExportObjects, fileName, watermarkText, layers, renderDoc, pushToast]);
 
   const handleMerge = useCallback(() => {
     mergeInputRef.current?.click();
@@ -703,7 +711,7 @@ function App() {
     try {
       let bytes = pdfBytes;
       if (objects.length > 0) {
-        bytes = await secureEmbed(bytes, objects, layers, renderDoc, { flattenForm: true });
+        bytes = await secureEmbed(bytes, getExportObjects(), layers, renderDoc, { flattenForm: true });
       }
       if (watermarkText) {
         bytes = await addWatermark(bytes, watermarkText);
@@ -725,7 +733,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, watermarkText, layers, renderDoc, pushToast]);
+  }, [appendExportReceipt, appendWorkflowAction, pdfBytes, objects, getExportObjects, watermarkText, layers, renderDoc, pushToast]);
 
   // --- Export ---
   const handleExportWord = useCallback(async () => {

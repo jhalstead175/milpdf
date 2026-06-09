@@ -22,3 +22,28 @@ export function toEnginePage(meta, objects = []) {
     objects: owned,
   };
 }
+
+// Build the full engine Document from the live store (pageMeta + flat objects).
+// Page order follows pageMeta, which mirrors the real PDF page order.
+export function toEngineDocument(pageMeta = [], objects = []) {
+  return {
+    pages: pageMeta.map((meta, index) => ({
+      ...toEnginePage(meta, objects),
+      number: index + 1,
+    })),
+  };
+}
+
+// Flatten an engine Document back to the flat objects[] the embed pipeline
+// consumes — but with each object's `page` set from its OWNING page's index,
+// not from a stale `obj.page`. This is what makes export ownership-authoritative:
+// page reorder/insert/delete can no longer desync export from what the user sees.
+export function documentToEmbedObjects(doc) {
+  const out = [];
+  for (const page of doc.pages) {
+    for (const obj of page.objects) {
+      out.push({ ...obj, page: page.number });
+    }
+  }
+  return out;
+}
