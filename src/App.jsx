@@ -617,17 +617,14 @@ function App() {
         if (prev === pageNumber) return Math.min(pageNumber, result.pdfDoc.getPageCount());
         return prev > pageNumber ? prev - 1 : prev;
       });
+      // Drop annotations that belonged to the deleted page. No page-number
+      // resync needed: render and export both derive position from pageId
+      // ownership, and updateFromResult already re-mapped the page ids.
       commitHistory(prev =>
-        prev
-          .filter((annotation) => {
-            if (removedPageMeta?.id && annotation.pageId) return annotation.pageId !== removedPageMeta.id;
-            return annotation.page !== pageNumber;
-          })
-          .map((annotation) => (
-            annotation.pageId || annotation.page <= pageNumber
-              ? annotation
-              : { ...annotation, page: annotation.page - 1 }
-          ))
+        prev.filter((annotation) => {
+          if (removedPageMeta?.id && annotation.pageId) return annotation.pageId !== removedPageMeta.id;
+          return annotation.page !== pageNumber;
+        })
       );
     } catch (err) {
       alert('Failed to delete page: ' + err.message);
@@ -824,22 +821,28 @@ const runDD214Analysis = useCallback(async () => {
   }, [renderDoc, profile, handleProfileSave]);
 
   // --- EditorObject scene graph CRUD (also handles legacy annotations) ---
+  // Stamp every object with the pageId of its OWN page (by page number), falling
+  // back to the current page. Full pageId coverage is what lets page ownership be
+  // authoritative and the manual obj.page resync go away.
+  const ensurePageId = useCallback((obj) => {
+    if (obj.pageId) return obj;
+    const ownPageId = pageMeta.find((meta) => meta.number === obj.page)?.id;
+    const pageId = ownPageId ?? currentPageMeta?.id;
+    return pageId ? { ...obj, pageId } : obj;
+  }, [pageMeta, currentPageMeta]);
+
   const handleAddObject = useCallback((obj) => {
-    const nextObject = obj.pageId || !currentPageMeta?.id ? obj : { ...obj, pageId: currentPageMeta.id };
+    const nextObject = ensurePageId(obj);
     addObject(nextObject);
     pushToast({ type: 'info', title: 'Annotation Added', message: nextObject?.type || 'Annotation' });
     if (nextObject?.type === 'evidenceMarker') {
       pushToast({ type: 'success', title: 'Evidence Marker', message: nextObject?.label || 'Evidence marker created.' });
       if (nextObject.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
     }
-  }, [addObject, currentPageMeta, pushToast]);
+  }, [addObject, ensurePageId, pushToast]);
 
   const handleAddObjects = useCallback((newObjects) => {
-    const normalizedObjects = newObjects.map((obj) => (
-      obj.pageId || !currentPageMeta?.id || obj.page !== currentPage
-        ? obj
-        : { ...obj, pageId: currentPageMeta.id }
-    ));
+    const normalizedObjects = newObjects.map(ensurePageId);
     addObjects(normalizedObjects);
     normalizedObjects.forEach(obj => {
       pushToast({ type: 'info', title: 'Annotation Added', message: obj?.type || 'Annotation' });
@@ -848,7 +851,7 @@ const runDD214Analysis = useCallback(async () => {
         if (obj.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
       }
     });
-  }, [addObjects, currentPage, currentPageMeta, pushToast]);
+  }, [addObjects, ensurePageId, pushToast]);
 
   const runAutoRedact = useCallback(async () => {
     if (!renderDoc) return;
