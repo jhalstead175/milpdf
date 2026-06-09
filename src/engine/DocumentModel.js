@@ -55,9 +55,14 @@ function baseObject(type, kind, props = {}) {
 export function createTextObject(props) {
   return baseObject('text', 'overlay', {
     text: '',
-    fontSize: 12,
-    lineHeight: 1.2,
+    fontSize: 16,
+    fontFamily: 'Helvetica',
+    fontWeight: 'normal',
+    fontStyle: 'normal',
     color: '#000000',
+    alignment: 'left',
+    lineHeight: 1.2,
+    opacity: 1,
     ...props,
   });
 }

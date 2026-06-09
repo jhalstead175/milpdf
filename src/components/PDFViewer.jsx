@@ -7,6 +7,9 @@ import { createToolRegistry } from '../core/tools';
 import { createInteractionState } from '../core/interaction/state';
 import { RENDER_LAYERS } from '../core/rendering/layers';
 import { startResize, startRotate } from '../core/transform';
+import { createTextObject } from '../engine/DocumentModel';
+import { buildRenderList } from '../engine/render';
+import { toEnginePage } from '../engine/adapter';
 import {
   alignLeft, alignRight, alignTop, alignBottom,
   alignCenterH, alignCenterV,
@@ -332,6 +335,22 @@ export default function PDFViewer({
     ...extra,
   }), [currentPage, currentPageId, getNextZIndex]);
 
+  // Engine projection running silently on real data (Phase 3 — verify before flip).
+  // buildRenderList consumes the SAME live objects the page renders, proving the
+  // Model -> render-instructions path works end to end. DEV-only; no UI effect.
+  useEffect(() => {
+    if (!import.meta.env?.DEV) return;
+    const enginePage = toEnginePage(
+      { id: currentPageId, number: currentPage, width: pdfPageWidth, height: pdfPageHeight, rotation: 0 },
+      objects,
+    );
+    const renderList = buildRenderList(enginePage);
+    const textOps = renderList.filter((op) => op.type === 'text').length;
+    console.info(
+      `[engine] page ${currentPage}: buildRenderList -> ${renderList.length} render ops (${textOps} text)`
+    );
+  }, [objects, currentPage, currentPageId, pdfPageWidth, pdfPageHeight]);
+
   const renderObjects = useMemo(() => {
     if (!interactionState.dragPreview || interactionState.dragPreview.size === 0) return visibleObjects;
     return visibleObjects.map(obj => {
@@ -521,7 +540,11 @@ export default function PDFViewer({
           alignment: textInput.alignment || 'left',
         });
       } else {
-        onAddObject(createBaseObject('text', rect, 'markup', {
+        // First tool migrated to the engine: the new Text object is constructed
+        // by the engine factory (single schema of record). createBaseObject still
+        // supplies the legacy locator fields (page/pageId/transform/zIndex) until
+        // the engine document replaces the flat store as the source of truth.
+        onAddObject(createTextObject(createBaseObject('text', rect, 'markup', {
           text: textInput.text,
           fontSize: textInput.fontSize || toolDefaults.text?.fontSize || 16,
           fontFamily: textInput.fontFamily || toolDefaults.text?.fontFamily || 'Helvetica',
@@ -531,7 +554,7 @@ export default function PDFViewer({
           alignment: textInput.alignment || 'left',
           lineHeight: 1.2,
           autoHeight: false,
-        }));
+        })));
       }
     }
     setTextInput(null);

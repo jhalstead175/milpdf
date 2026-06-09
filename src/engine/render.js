@@ -18,9 +18,16 @@ export function buildRenderList(page) {
           type: 'text',
           x: obj.pdfX,
           y: obj.pdfY,
+          width: obj.width,
+          height: obj.height,
           text: obj.text,
           fontSize: obj.fontSize,
+          fontFamily: obj.fontFamily,
+          fontWeight: obj.fontWeight,
+          fontStyle: obj.fontStyle,
           color: obj.color,
+          alignment: obj.alignment,
+          opacity: obj.opacity,
         };
       }
 
