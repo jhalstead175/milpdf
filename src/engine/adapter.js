@@ -9,11 +9,17 @@
 // Grouping mirrors the store's own `pages` selector (sceneGraph/store.js):
 // prefer stable pageId, fall back to legacy page number.
 
+// The single definition of "does this object belong to this page".
+// Prefer the stable pageId; fall back to the legacy page number for objects
+// created before they were assigned one. Both render and export derive page
+// ownership from THIS function — there is no second copy to drift.
+export function isObjectOnPage(meta, obj) {
+  return obj.pageId ? obj.pageId === meta.id : obj.page === meta.number;
+}
+
 export function toEnginePage(meta, objects = []) {
   if (!meta) return null;
-  const owned = objects.filter((o) =>
-    o.pageId ? o.pageId === meta.id : o.page === meta.number
-  );
+  const owned = objects.filter((o) => isObjectOnPage(meta, o));
   return {
     id: meta.id,
     width: meta.width,

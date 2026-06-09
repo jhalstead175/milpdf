@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import useCommandHistory from '../../hooks/useCommandHistory';
 import { createInteractionState } from '../interaction/state';
+import { isObjectOnPage } from '../../engine/adapter';
 
 export function useEditorStore(initialObjects = []) {
   const history = useCommandHistory(initialObjects);
@@ -81,10 +82,7 @@ export function useEditorStore(initialObjects = []) {
   const pages = useMemo(() => (
     pageMeta.map(meta => ({
       ...meta,
-      objects: history.state.filter((obj) => {
-        if (obj.pageId) return obj.pageId === meta.id;
-        return obj.page === meta.number;
-      }),
+      objects: history.state.filter((obj) => isObjectOnPage(meta, obj)),
     }))
   ), [pageMeta, history.state]);
 
