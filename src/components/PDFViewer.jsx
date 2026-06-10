@@ -130,6 +130,10 @@ export default function PDFViewer({
   const renderTaskRef  = useRef(null);
   const isRenderingRef = useRef(false);
   const pendingRenderRef = useRef(false);
+  // Always points at the latest renderPage so the pending-render re-invoke
+  // below doesn't fire a stale closure (which froze the page at the zoom/page
+  // captured when the first render started — e.g. zoom never visually applied).
+  const renderPageRef = useRef(null);
   const renderKeyRef = useRef(0);
   const lastPointerPosRef = useRef({ x: 0, y: 0 });
 
@@ -245,11 +249,14 @@ export default function PDFViewer({
       if (pendingRenderRef.current) {
         pendingRenderRef.current = false;
         queueMicrotask(() => {
-          void renderPage();
+          void (renderPageRef.current ?? renderPage)();
         });
       }
     }
   }, [cancelRenderTask, currentPage, renderDoc, zoom]);
+
+  // Keep the ref pointing at the freshest renderPage (current zoom/page/doc).
+  renderPageRef.current = renderPage;
 
   useEffect(() => {
     pendingRenderRef.current = false;

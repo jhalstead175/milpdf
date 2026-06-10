@@ -187,6 +187,8 @@ function App() {
     toggleNavCollapsed,
     inspectorCollapsed,
     toggleInspectorCollapsed,
+    toolRailCollapsed,
+    toggleToolRailCollapsed,
   } = useWorkspaceStore('review');
   const {
     findings,
@@ -1333,7 +1335,29 @@ const runDD214Analysis = useCallback(async () => {
     wheelAccumulatorRef.current = 0;
   }, [numPages]);
 
+  const ZOOM_MIN = 0.25;
+  const ZOOM_MAX = 3;
+  const ZOOM_STEP = 0.25;
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => Math.min(ZOOM_MAX, Math.round((z + ZOOM_STEP) * 100) / 100));
+  }, [setZoom]);
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => Math.max(ZOOM_MIN, Math.round((z - ZOOM_STEP) * 100) / 100));
+  }, [setZoom]);
+  const handleZoomReset = useCallback(() => {
+    setZoom(1);
+  }, [setZoom]);
+
   const handleViewerWheel = useCallback((e) => {
+    // Ctrl/Cmd + wheel zooms the page, like most document viewers.
+    if ((e.ctrlKey || e.metaKey) && renderDoc) {
+      e.preventDefault();
+      setZoom((z) => {
+        const next = z - Math.sign(e.deltaY) * ZOOM_STEP;
+        return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next * 100) / 100));
+      });
+      return;
+    }
     if (!renderDoc || numPages <= 1) return;
     wheelAccumulatorRef.current += e.deltaY;
     const threshold = 120;
@@ -1356,7 +1380,7 @@ const runDD214Analysis = useCallback(async () => {
     wheelResetTimeoutRef.current = window.setTimeout(() => {
       wheelAccumulatorRef.current = 0;
     }, 180);
-  }, [currentPage, numPages, renderDoc]);
+  }, [currentPage, numPages, renderDoc, setZoom]);
 
   useEffect(() => () => {
     window.clearTimeout(wheelResetTimeoutRef.current);
@@ -2036,6 +2060,11 @@ const runDD214Analysis = useCallback(async () => {
         onReviewPanelTabChange={setReviewPanelTab}
         inspectorCollapsed={inspectorCollapsed}
         onToggleInspector={toggleInspectorCollapsed}
+        toolRailCollapsed={toolRailCollapsed}
+        onToggleToolRail={toggleToolRailCollapsed}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onZoomReset={handleZoomReset}
         onViewerWheel={handleViewerWheel}
         onHandleOpen={handleOpen}
         onHandleToolChange={handleToolChange}

@@ -34,6 +34,7 @@ export function useWorkspaceStore(initialWorkspace = 'review') {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = usePersistentBoolean('milpdf.navCollapsed', false);
   const [inspectorCollapsed, setInspectorCollapsed] = usePersistentBoolean('milpdf.inspectorCollapsed', false);
+  const [toolRailCollapsed, setToolRailCollapsed] = usePersistentBoolean('milpdf.toolRailCollapsed', false);
 
   const toggleAssistant = useCallback(() => {
     setAssistantOpen((prev) => !prev);
@@ -46,6 +47,10 @@ export function useWorkspaceStore(initialWorkspace = 'review') {
   const toggleInspectorCollapsed = useCallback(() => {
     setInspectorCollapsed((prev) => !prev);
   }, [setInspectorCollapsed]);
+
+  const toggleToolRailCollapsed = useCallback(() => {
+    setToolRailCollapsed((prev) => !prev);
+  }, [setToolRailCollapsed]);
 
   return {
     workspace,
@@ -62,5 +67,7 @@ export function useWorkspaceStore(initialWorkspace = 'review') {
     inspectorCollapsed,
     toggleInspectorCollapsed,
     setInspectorCollapsed,
+    toolRailCollapsed,
+    toggleToolRailCollapsed,
   };
 }

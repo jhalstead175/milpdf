@@ -1,6 +1,6 @@
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
-  PanelRightOpen,
+  PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -47,6 +47,11 @@ export default function ReviewWorkspace({
   onReviewPanelTabChange,
   inspectorCollapsed = false,
   onToggleInspector,
+  toolRailCollapsed = false,
+  onToggleToolRail,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
   onViewerWheel,
   onHandleOpen,
   onHandleToolChange,
@@ -250,39 +255,62 @@ export default function ReviewWorkspace({
 
   return (
     <section className="review-workspace">
-      <div className={`review-layout ${inspectorCollapsed ? 'inspector-collapsed' : ''}`}>
-        <div className="review-panel-left">
-          <div className="tool-rail">
-            {[
-              { id: 'select', icon: MousePointer2, label: 'Select' },
-              { id: 'highlight', icon: Highlighter, label: 'Highlight' },
-              { id: 'draw', icon: Pencil, label: 'Draw' },
-              { id: 'text', icon: Type, label: 'Text' },
-              { id: 'textedit', icon: SquarePen, label: 'Edit Text' },
-              { id: 'note', icon: PenTool, label: 'Signature' },
-              { id: 'redact', icon: ShieldOff, label: 'Redact' },
-              { id: 'eraser', icon: Eraser, label: 'Whiteout' },
-            ].map((item) => {
-              const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
-              const isActive = activeTool === mappedTool;
-              const Icon = item.icon;
+      <div className={`review-layout ${inspectorCollapsed ? 'inspector-collapsed' : ''} ${toolRailCollapsed ? 'tool-collapsed' : ''}`}>
+        {toolRailCollapsed ? (
+          <button
+            type="button"
+            className="review-tools-reopen"
+            onClick={onToggleToolRail}
+            title="Show tools"
+            aria-label="Show tools"
+          >
+            <PanelLeftOpen size={16} />
+            <span>Tools</span>
+          </button>
+        ) : (
+          <div className="review-panel-left">
+            <div className="tool-rail">
+              {[
+                { id: 'select', icon: MousePointer2, label: 'Select' },
+                { id: 'highlight', icon: Highlighter, label: 'Highlight' },
+                { id: 'draw', icon: Pencil, label: 'Draw' },
+                { id: 'text', icon: Type, label: 'Text' },
+                { id: 'textedit', icon: SquarePen, label: 'Edit Text' },
+                { id: 'note', icon: PenTool, label: 'Signature' },
+                { id: 'redact', icon: ShieldOff, label: 'Redact' },
+                { id: 'eraser', icon: Eraser, label: 'Whiteout' },
+              ].map((item) => {
+                const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
+                const isActive = activeTool === mappedTool;
+                const Icon = item.icon;
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`tool-rail-button ${isActive ? 'active' : ''}`}
-                  onClick={() => onHandleToolChange(mappedTool)}
-                  title={item.label}
-                  aria-label={item.label}
-                  disabled={!renderDoc || !pdfjsReady}
-                >
-                  <Icon size={16} strokeWidth={1.9} />
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`tool-rail-button ${isActive ? 'active' : ''}`}
+                    onClick={() => onHandleToolChange(mappedTool)}
+                    title={item.label}
+                    aria-label={item.label}
+                    disabled={!renderDoc || !pdfjsReady}
+                  >
+                    <Icon size={16} strokeWidth={1.9} />
+                  </button>
+                );
+              })}
+              <div className="tool-rail-spacer" />
+              <button
+                type="button"
+                className="tool-rail-button tool-rail-collapse"
+                onClick={onToggleToolRail}
+                title="Hide tools"
+                aria-label="Hide tools"
+              >
+                <PanelLeftClose size={16} strokeWidth={1.9} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="review-canvas">
           <div className="canvas-stage">
@@ -323,11 +351,24 @@ export default function ReviewWorkspace({
               </div>
             </div>
             {renderDoc ? (
-              <div className="canvas-page-pill">
-                <button onClick={() => onJumpToPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
-                <span>{currentPage} / {numPages}</span>
-                <button onClick={() => onJumpToPage(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
-              </div>
+              <>
+                <div className="canvas-zoom-pill">
+                  <button onClick={onZoomOut} disabled={zoom <= 0.25} title="Zoom out" aria-label="Zoom out">
+                    <ZoomOut size={14} strokeWidth={1.9} />
+                  </button>
+                  <button className="canvas-zoom-value" onClick={onZoomReset} title="Reset to 100%">
+                    {Math.round(zoom * 100)}%
+                  </button>
+                  <button onClick={onZoomIn} disabled={zoom >= 3} title="Zoom in" aria-label="Zoom in">
+                    <ZoomIn size={14} strokeWidth={1.9} />
+                  </button>
+                </div>
+                <div className="canvas-page-pill">
+                  <button onClick={() => onJumpToPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
+                  <span>{currentPage} / {numPages}</span>
+                  <button onClick={() => onJumpToPage(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
+                </div>
+              </>
             ) : null}
           </div>
         </div>
