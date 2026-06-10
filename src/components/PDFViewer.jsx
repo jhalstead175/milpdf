@@ -536,7 +536,7 @@ export default function PDFViewer({
     const screen = pdfRectToScreen(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
     setTextEditTarget({
       run,
-      value: run.text,
+      value: run.displayText ?? run.text,
       editable: run.editable !== false,
       left: screen.left,
       top: screen.top,

@@ -6,9 +6,21 @@
 // runs whose font is a simple single-byte type; everything else is declined
 // (Phase 4b will substitute a standard font to edit those too).
 
-import { PDFName } from 'pdf-lib';
+import { PDFName, decodePDFRawStream } from 'pdf-lib';
+import { parseToUnicodeCMap } from './cmap';
 
 const EDITABLE_SUBTYPES = new Set(['Type1', 'TrueType', 'MMType1']);
+
+function readToUnicode(doc, fontDict) {
+  try {
+    const stream = doc.context.lookup(fontDict.get(PDFName.of('ToUnicode')));
+    if (!stream || typeof stream.contents === 'undefined') return null;
+    const bytes = decodePDFRawStream(stream).decode();
+    return parseToUnicodeCMap(new TextDecoder('latin1').decode(bytes));
+  } catch {
+    return null;
+  }
+}
 
 function nameToString(obj) {
   if (obj == null) return null;
@@ -41,7 +53,11 @@ export function getPageFontMap(doc, page) {
     for (const [key, ref] of fontDict.entries()) {
       const fdict = doc.context.lookup(ref);
       const subtype = nameToString(fdict?.get?.(PDFName.of('Subtype')));
-      map.set(nameToString(key), { subtype, editable: EDITABLE_SUBTYPES.has(subtype) });
+      map.set(nameToString(key), {
+        subtype,
+        editable: EDITABLE_SUBTYPES.has(subtype),
+        toUnicode: readToUnicode(doc, fdict),
+      });
     }
   } catch {
     /* leave empty — callers treat unknown fonts as not-editable */

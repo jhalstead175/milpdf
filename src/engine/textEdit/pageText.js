@@ -8,6 +8,7 @@
 import { PDFDocument, PDFArray, decodePDFRawStream } from 'pdf-lib';
 import { extractTextRuns } from './textRuns';
 import { getPageFontMap } from './fontInfo';
+import { decodeWithCMap } from './cmap';
 
 function decodeStreamBytes(stream) {
   try {
@@ -47,6 +48,18 @@ export async function getPageRuns(pdfBytes, pageNumber) {
   const fontMap = getPageFontMap(doc, page);
   return extractTextRuns(content).map((run) => {
     const info = fontMap.get(run.fontRef);
-    return { ...run, editable: info ? info.editable : false, fontSubtype: info?.subtype ?? null };
+    // Prefer ToUnicode-decoded text for display (correct for CID/Type0 fonts,
+    // whose raw run.text is glyph codes). Fall back to the raw operand text.
+    let displayText = run.text;
+    if (info?.toUnicode) {
+      const decoded = decodeWithCMap(run.text, info.toUnicode.codeLen, info.toUnicode.map);
+      if (decoded) displayText = decoded;
+    }
+    return {
+      ...run,
+      displayText,
+      editable: info ? info.editable : false,
+      fontSubtype: info?.subtype ?? null,
+    };
   });
 }
