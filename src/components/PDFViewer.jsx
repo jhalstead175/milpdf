@@ -10,6 +10,8 @@ import { startResize, startRotate } from '../core/transform';
 import { createTextObject } from '../engine/DocumentModel';
 import { buildRenderList } from '../engine/render';
 import { toEnginePage } from '../engine/adapter';
+import { getPageRuns } from '../engine/textEdit/pageText';
+import { locateTextRunAtPoint, estimateRunBox } from '../engine/textEdit/locate';
 import {
   alignLeft, alignRight, alignTop, alignBottom,
   alignCenterH, alignCenterV,
@@ -117,6 +119,8 @@ export default function PDFViewer({
   onImagePlacementCancel,
   toolDefaults = {},
   pdfjsReady = true,
+  pdfBytes = null,
+  onTextEdit,
 }) {
   const canvasRef      = useRef(null);
   const containerRef   = useRef(null);
@@ -134,6 +138,7 @@ export default function PDFViewer({
   const cropStartRef  = useRef(null);
   const imageStartRef = useRef(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [textEditTarget, setTextEditTarget] = useState(null);
 
   const [textBoxRect, setTextBoxRect] = useState(null);
   const [textBoxStart, setTextBoxStart] = useState(null);
@@ -276,6 +281,7 @@ export default function PDFViewer({
     if (activeTool !== 'edit') { setEditRect(null); setEditStart(null); setEditInput(null); }
     if (activeTool !== 'text') { setTextBoxRect(null); setTextBoxStart(null); setTextInput(null); }
     if (activeTool !== 'select' && setInteractionState) { setInteractionState(createInteractionState()); }
+    if (activeTool !== 'textedit') { setTextEditTarget(null); }
   }, [activeTool, setInteractionState]);
   const getCanvasPos = useCallback((e) => {
     if (!canvasRef.current) return { x: 0, y: 0 };
@@ -513,14 +519,48 @@ export default function PDFViewer({
     toolRegistry,
   ]);
 
+  // In-place text editing: click an existing text run -> edit it in the PDF.
+  const handleTextEditClick = useCallback(async (pos) => {
+    if (!pdfBytes || !onTextEdit) return;
+    const point = screenToPdfPoint(pos.x, pos.y);
+    let runs;
+    try {
+      runs = await getPageRuns(pdfBytes, currentPage);
+    } catch (err) {
+      console.warn('Text edit: could not read page text:', err);
+      return;
+    }
+    const run = locateTextRunAtPoint(runs, point);
+    if (!run) { setTextEditTarget(null); return; }
+    const box = estimateRunBox(run);
+    const screen = pdfRectToScreen(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    setTextEditTarget({
+      run,
+      value: run.text,
+      left: screen.left,
+      top: screen.top,
+      width: Math.max(screen.width, 60),
+      height: Math.max(screen.height, 16),
+      fontSize: (run.fontSize || 12) * zoom,
+    });
+  }, [pdfBytes, onTextEdit, currentPage, screenToPdfPoint, pdfRectToScreen, zoom]);
+
+  const commitTextEdit = useCallback(() => {
+    if (!textEditTarget) return;
+    const { run, value } = textEditTarget;
+    if (value !== run.text && value.trim() !== '') onTextEdit(currentPage, run, value);
+    setTextEditTarget(null);
+  }, [textEditTarget, onTextEdit, currentPage]);
+
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
+    if (activeTool === 'textedit') { handleTextEditClick(getCanvasPos(e)); return; }
     const tool = toolRegistry[activeTool];
     if (!tool?.onClick) return;
     const pos = getCanvasPos(e);
     lastPointerPosRef.current = pos;
     tool.onClick(e, pos);
-  }, [activeTool, toolRegistry, getCanvasPos]);
+  }, [activeTool, toolRegistry, getCanvasPos, handleTextEditClick]);
 
   const handleTextSubmit = useCallback(() => {
     if (textInput && textInput.text.trim()) {
@@ -999,6 +1039,37 @@ export default function PDFViewer({
                 top: redactRect.y,
                 width: redactRect.width,
                 height: redactRect.height,
+              }}
+            />
+          )}
+
+          {textEditTarget && (
+            <input
+              className="text-edit-inline"
+              autoFocus
+              value={textEditTarget.value}
+              onChange={(e) => setTextEditTarget((t) => (t ? { ...t, value: e.target.value } : t))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
+              }}
+              onBlur={commitTextEdit}
+              style={{
+                position: 'absolute',
+                left: textEditTarget.left,
+                top: textEditTarget.top,
+                width: textEditTarget.width,
+                minHeight: textEditTarget.height,
+                fontSize: textEditTarget.fontSize,
+                lineHeight: 1.1,
+                padding: '0 2px',
+                margin: 0,
+                border: '1px solid #4063ff',
+                background: '#ffffff',
+                color: '#000000',
+                boxSizing: 'border-box',
+                pointerEvents: 'auto',
+                zIndex: 60,
               }}
             />
           )}

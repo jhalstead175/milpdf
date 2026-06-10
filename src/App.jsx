@@ -28,6 +28,7 @@ import {
 } from './utils/pdfUtils';
 import { secureEmbed } from './core/export';
 import { toEngineDocument, documentToEmbedObjects } from './engine/adapter';
+import { applyTextEdit } from './engine/textEdit/edit';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -840,6 +841,23 @@ const runDD214Analysis = useCallback(async () => {
       if (nextObject.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
     }
   }, [addObject, ensurePageId, pushToast]);
+
+  // In-place text edit: rewrite the base PDF text, then refresh the render
+  // from the new bytes while preserving annotations (objects) and page ids.
+  const handleTextEdit = useCallback(async (pageNumber, run, newText) => {
+    if (!pdfBytes) return;
+    setLoading(true);
+    try {
+      const newBytes = await applyTextEdit(pdfBytes, pageNumber, run, newText);
+      const result = await loadPdf(newBytes);
+      updateFromResult(result, { pageIds: pageMeta.map((meta) => meta.id) });
+      pushToast({ type: 'success', title: 'Text Updated', message: 'Edited the PDF text in place.' });
+    } catch (err) {
+      alert('Failed to edit text: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, pageMeta, updateFromResult, pushToast]);
 
   const handleAddObjects = useCallback((newObjects) => {
     const normalizedObjects = newObjects.map(ensurePageId);
@@ -1986,6 +2004,8 @@ const runDD214Analysis = useCallback(async () => {
     workspaceContent = (
       <ReviewWorkspace
         renderDoc={renderDoc}
+        pdfBytes={pdfBytes}
+        onTextEdit={handleTextEdit}
         pdfjsReady={pdfjsReady}
         numPages={numPages}
         currentPage={currentPage}

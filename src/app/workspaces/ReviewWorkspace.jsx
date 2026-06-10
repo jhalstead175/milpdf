@@ -1,5 +1,5 @@
 import {
-  MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff,
+  MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -18,6 +18,8 @@ const REVIEW_TABS = [
 
 export default function ReviewWorkspace({
   renderDoc,
+  pdfBytes,
+  onTextEdit,
   pdfjsReady,
   numPages,
   currentPage,
@@ -363,6 +365,7 @@ export default function ReviewWorkspace({
               { id: 'highlight', icon: Highlighter, label: 'Highlight' },
               { id: 'draw', icon: Pencil, label: 'Draw' },
               { id: 'text', icon: Type, label: 'Text' },
+              { id: 'textedit', icon: SquarePen, label: 'Edit Text' },
               { id: 'note', icon: PenTool, label: 'Signature' },
               { id: 'redact', icon: ShieldOff, label: 'Redact' },
               { id: 'eraser', icon: Eraser, label: 'Whiteout' },
@@ -438,6 +441,8 @@ export default function ReviewWorkspace({
               <div className="canvas-stage-inner">
                 <PDFViewer
                   renderDoc={renderDoc}
+                  pdfBytes={pdfBytes}
+                  onTextEdit={onTextEdit}
                   currentPage={currentPage}
                   zoom={zoom}
                   activeTool={activeTool}
