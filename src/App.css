@@ -587,9 +587,43 @@ html.editor-active #root {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Blueprint grid (echoes the landing page) under a faint slate glow. */
   background:
+    linear-gradient(rgba(79, 97, 117, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 97, 117, 0.06) 1px, transparent 1px),
     radial-gradient(circle at 20% 0%, rgba(79, 97, 117, 0.08), transparent 22%),
     var(--app-canvas-bg);
+  background-size: 44px 44px, 44px 44px, auto, auto;
+}
+
+/* Sonar/scan sweep — only while no document is loaded, so it never
+   distracts during review. Mirrors the landing page's hero scan line. */
+.canvas-stage::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  top: 18%;
+  background: linear-gradient(90deg, transparent, rgba(79, 97, 117, 0.5), transparent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.canvas-stage.is-empty::after {
+  animation: canvasScan 9s ease-in-out infinite;
+}
+
+@keyframes canvasScan {
+  0%, 100% { top: 18%; opacity: 0; }
+  12% { opacity: 1; }
+  50% { top: 82%; opacity: 0.55; }
+  88% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-stage.is-empty::after { animation: none; }
 }
 
 .canvas-scroll-container {
@@ -2634,7 +2668,9 @@ html.editor-active #root {
 
 .empty-message {
   text-align: center;
-  color: rgba(209, 250, 229, 0.62);
+  color: var(--app-text-muted);
+  position: relative;
+  z-index: 2;
 }
 
 .empty-icon {

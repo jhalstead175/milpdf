@@ -313,7 +313,7 @@ export default function ReviewWorkspace({
         )}
 
         <div className="review-canvas">
-          <div className="canvas-stage">
+          <div className={`canvas-stage ${renderDoc ? '' : 'is-empty'}`}>
             <div className="canvas-scroll-container" onWheel={onViewerWheel}>
               <div className="canvas-stage-inner">
                 <PDFViewer
