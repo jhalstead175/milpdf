@@ -166,13 +166,13 @@ export default function PDFViewer({
     setSelection(new Set(selectionIds));
   }, [selectionIds]);
 
+  // Prune local selection to objects that still exist. The parent (App) prunes
+  // its own selection independently on [objects], so we must NOT call
+  // onSelectionChange from inside this state updater — doing so updates App while
+  // PDFViewer is rendering (React "setState-in-render" warning). Local-only here.
   useEffect(() => {
-    setSelection(prev => {
-      const next = new Set([...prev].filter(id => objects.some(o => o.id === id)));
-      if (onSelectionChange) onSelectionChange([...next]);
-      return next;
-    });
-  }, [objects, onSelectionChange]);
+    setSelection(prev => new Set([...prev].filter(id => objects.some(o => o.id === id))));
+  }, [objects]);
 
   const cancelRenderTask = useCallback(() => {
     if (!renderTaskRef.current) return;
