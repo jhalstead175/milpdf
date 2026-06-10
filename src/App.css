@@ -679,9 +679,15 @@ html.editor-active #root {
 
 .workspace-shell-nav {
   width: 220px;
+  flex-shrink: 0;
   border-right: 1px solid var(--app-border);
   background: rgba(15, 23, 42, 0.92);
   backdrop-filter: blur(14px);
+  transition: width 0.18s ease;
+}
+
+.workspace-shell-nav.collapsed {
+  width: 64px;
 }
 
 .workspace-shell-main {
@@ -733,10 +739,47 @@ html.editor-active #root {
   padding: 20px 16px;
 }
 
+.primary-nav.collapsed {
+  padding: 20px 10px;
+  align-items: center;
+}
+
 .primary-nav-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.primary-nav.collapsed .primary-nav-brand {
+  flex-direction: column;
+  gap: 14px;
+}
+
+.primary-nav-collapse {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--app-text-dim);
+  cursor: pointer;
+}
+
+.primary-nav-collapse:hover {
+  border-color: var(--app-accent-border-strong);
+  color: var(--app-text);
+}
+
+.primary-nav.collapsed .primary-nav-collapse {
+  margin-left: 0;
+}
+
+.primary-nav-icon {
+  flex-shrink: 0;
 }
 
 .primary-nav-logo {
@@ -772,6 +815,9 @@ html.editor-active #root {
 
 .primary-nav-item {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -779,6 +825,13 @@ html.editor-active #root {
   color: var(--app-text-dim);
   text-align: left;
   cursor: pointer;
+}
+
+.primary-nav.collapsed .primary-nav-item {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-content: center;
 }
 
 .primary-nav-item:hover,
@@ -955,7 +1008,8 @@ html.editor-active #root {
 .review-workspace {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .review-overview {
@@ -1114,11 +1168,68 @@ html.editor-active #root {
 
 .review-layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 340px;
+  grid-template-columns: 52px minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   padding: 16px 24px 24px;
   flex: 1;
   min-height: 0;
+}
+
+.review-layout.inspector-collapsed {
+  grid-template-columns: 52px minmax(0, 1fr) 40px;
+}
+
+.review-panel-reopen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 0;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-card-strong);
+  color: var(--app-text-dim);
+  cursor: pointer;
+}
+
+.review-panel-reopen:hover {
+  border-color: var(--app-accent-border-strong);
+  color: var(--app-text);
+}
+
+.review-panel-reopen span {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-panel-collapse {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--app-text-dim);
+  cursor: pointer;
+}
+
+.workspace-panel-collapse:hover {
+  border-color: var(--app-accent-border-strong);
+  color: var(--app-text);
+}
+
+.empty-open-btn {
+  margin-top: 18px;
 }
 
 .review-panel-left,
@@ -1130,7 +1241,22 @@ html.editor-active #root {
 .review-panel-left {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  min-height: 0;
+}
+
+/* In the single-screen editor the left rail is just the tool strip: a
+   full-height rounded card instead of a flat bordered strip. */
+.review-panel-left .tool-rail {
+  flex: 1;
+  height: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+}
+
+.review-canvas {
+  display: flex;
+  flex-direction: column;
 }
 
 .review-document-summary {

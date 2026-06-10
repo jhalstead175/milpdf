@@ -121,6 +121,7 @@ export default function PDFViewer({
   pdfjsReady = true,
   pdfBytes = null,
   onTextEdit,
+  onOpen,
 }) {
   const canvasRef      = useRef(null);
   const containerRef   = useRef(null);
@@ -745,9 +746,14 @@ export default function PDFViewer({
           <h2>{pdfjsReady ? 'Open a PDF to get started' : 'INITIALIZING ENGINE...'}</h2>
           <p>
             {pdfjsReady
-              ? 'Click "Open" in the toolbar, or drag and drop a PDF here'
+              ? 'Open a PDF from the toolbar, or drag and drop one here'
               : 'PDF rendering is still loading. Upload is disabled until initialization completes.'}
           </p>
+          {pdfjsReady && onOpen ? (
+            <button type="button" className="btn-primary empty-open-btn" onClick={onOpen}>
+              Open PDF
+            </button>
+          ) : null}
         </div>
       </div>
     );

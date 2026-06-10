@@ -9,6 +9,8 @@ export default function GlobalTopBar({
   lastAction,
   onOpenCommandPalette,
   onToggleAssistant,
+  onOpen,
+  onOpenDisabled = false,
   onSave,
   onExport,
 }) {
@@ -31,6 +33,11 @@ export default function GlobalTopBar({
       </div>
 
       <div className="global-topbar-actions">
+        {onOpen ? (
+          <button type="button" className="btn-secondary" onClick={onOpen} disabled={onOpenDisabled}>
+            Open
+          </button>
+        ) : null}
         <button type="button" className="btn-secondary" onClick={onOpenCommandPalette}>
           Commands
         </button>

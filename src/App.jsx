@@ -183,7 +183,11 @@ function App() {
     setReviewPanelTab,
     commandPaletteOpen,
     setCommandPaletteOpen,
-  } = useWorkspaceStore(isElectron ? 'review' : 'inbox');
+    navCollapsed,
+    toggleNavCollapsed,
+    inspectorCollapsed,
+    toggleInspectorCollapsed,
+  } = useWorkspaceStore('review');
   const {
     findings,
     addFindings,
@@ -2022,7 +2026,6 @@ const runDD214Analysis = useCallback(async () => {
         toolDefaults={toolDefaults}
         activeToolConfig={activeToolConfig}
         activeFormProfile={activeFormProfile}
-        fileName={fileName}
         watermarkText={watermarkText}
         imagePlacement={imagePlacement}
         signatureDataUrl={signatureDataUrl}
@@ -2031,9 +2034,10 @@ const runDD214Analysis = useCallback(async () => {
         reviewFindings={reviewFindings}
         reviewPanelTab={reviewPanelTab}
         onReviewPanelTabChange={setReviewPanelTab}
+        inspectorCollapsed={inspectorCollapsed}
+        onToggleInspector={toggleInspectorCollapsed}
         onViewerWheel={handleViewerWheel}
         onHandleOpen={handleOpen}
-        onHandleInsertPdfPages={handleInsertPdfPages}
         onHandleToolChange={handleToolChange}
         onHandleToolDefaultChange={handleToolDefaultChange}
         onSetSelection={setSelection}
@@ -2085,7 +2089,7 @@ const runDD214Analysis = useCallback(async () => {
         <LandingPage
           onLaunchEditor={() => {
             setView('editor');
-            setWorkspace('inbox');
+            setWorkspace('review');
           }}
           onDownloadDesktop={() => {
             window.open('https://github.com/jhalstead175/milpdf/releases', '_blank', 'noopener');
@@ -2095,11 +2099,14 @@ const runDD214Analysis = useCallback(async () => {
         <>
           <div className="app">
             <AppShell
+              navCollapsed={navCollapsed}
               nav={(
                 <PrimaryNav
                   items={WORKSPACE_ITEMS}
                   activeItem={workspace}
                   onChange={setWorkspace}
+                  collapsed={navCollapsed}
+                  onToggleCollapse={toggleNavCollapsed}
                 />
               )}
               topbar={(
@@ -2114,6 +2121,8 @@ const runDD214Analysis = useCallback(async () => {
                   lastAction={lastWorkflowAction}
                   onOpenCommandPalette={() => setCommandPaletteOpen(true)}
                   onToggleAssistant={toggleAssistant}
+                  onOpen={handleOpen}
+                  onOpenDisabled={!pdfjsReady}
                   onSave={handleSave}
                   onExport={() => setWorkspace('export')}
                 />

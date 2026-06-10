@@ -1,7 +1,10 @@
+import { PanelRightClose } from 'lucide-react';
+
 export default function ContextInspector({
   tabs = [],
   activeTab,
   onTabChange,
+  onCollapse,
   children,
 }) {
   const activePanel = tabs.find((tab) => tab.id === activeTab) || tabs[0] || null;
@@ -9,16 +12,25 @@ export default function ContextInspector({
   return (
     <section className="workspace-panel">
       <div className="workspace-panel-header">
-        {activePanel ? (
-          <div className="workspace-panel-summary">
-            <div className="workspace-panel-summary-copy">
-              <span className="workspace-panel-summary-eyebrow">Review Panel</span>
-              <strong>{activePanel.label}</strong>
-              {activePanel.description ? <span>{activePanel.description}</span> : null}
-            </div>
-            {activePanel.meta ? <span className="workspace-panel-summary-meta">{activePanel.meta}</span> : null}
+        <div className="workspace-panel-summary">
+          <div className="workspace-panel-summary-copy">
+            <span className="workspace-panel-summary-eyebrow">Review Panel</span>
+            {activePanel ? <strong>{activePanel.label}</strong> : null}
+            {activePanel?.description ? <span>{activePanel.description}</span> : null}
           </div>
-        ) : null}
+          {activePanel?.meta ? <span className="workspace-panel-summary-meta">{activePanel.meta}</span> : null}
+          {onCollapse ? (
+            <button
+              type="button"
+              className="workspace-panel-collapse"
+              onClick={onCollapse}
+              title="Hide panel"
+              aria-label="Hide panel"
+            >
+              <PanelRightClose size={16} />
+            </button>
+          ) : null}
+        </div>
         <div className="workspace-panel-tabs">
           {tabs.map((tab) => (
             <button

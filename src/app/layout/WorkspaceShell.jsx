@@ -4,10 +4,11 @@ export default function WorkspaceShell({
   main,
   rightPanel,
   statusBar,
+  navCollapsed = false,
 }) {
   return (
     <div className="workspace-shell">
-      <div className="workspace-shell-nav">{nav}</div>
+      <div className={`workspace-shell-nav ${navCollapsed ? 'collapsed' : ''}`}>{nav}</div>
       <div className="workspace-shell-main">
         <div className="workspace-shell-topbar">{topbar}</div>
         <div className="workspace-shell-content">

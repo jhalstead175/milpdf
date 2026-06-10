@@ -1,5 +1,6 @@
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
+  PanelRightOpen,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -36,7 +37,6 @@ export default function ReviewWorkspace({
   toolDefaults,
   activeToolConfig,
   activeFormProfile,
-  fileName,
   watermarkText,
   imagePlacement,
   signatureDataUrl,
@@ -45,9 +45,10 @@ export default function ReviewWorkspace({
   reviewFindings = [],
   reviewPanelTab,
   onReviewPanelTabChange,
+  inspectorCollapsed = false,
+  onToggleInspector,
   onViewerWheel,
   onHandleOpen,
-  onHandleInsertPdfPages,
   onHandleToolChange,
   onHandleToolDefaultChange,
   onSetSelection,
@@ -73,13 +74,6 @@ export default function ReviewWorkspace({
   assistantDockProps = {},
 }) {
   const pageIssueCount = pageAnnotations.length + reviewFindings.length;
-  const evidenceCount = evidenceIndex.markers.length;
-  const documentReady = renderDoc && pageIssueCount === 0;
-  const reviewStatusLabel = !renderDoc
-    ? 'No document loaded'
-    : documentReady
-      ? 'Ready for export review'
-      : `${pageIssueCount} review item${pageIssueCount === 1 ? '' : 's'} need attention`;
   const reviewTabs = REVIEW_TABS.map((tab) => {
     if (tab.id === 'selection') {
       return {
@@ -256,108 +250,7 @@ export default function ReviewWorkspace({
 
   return (
     <section className="review-workspace">
-      <div className="review-overview">
-        <div className="review-overview-card review-overview-primary">
-          <div className="review-overview-copy">
-            <span className="review-overview-eyebrow">Document Review</span>
-            <h2>{renderDoc ? fileName : 'Open a PDF to begin review'}</h2>
-            <p>
-              {renderDoc
-                ? reviewStatusLabel
-                : 'Load a document to start annotations, issue review, evidence prep, and export checks.'}
-            </p>
-          </div>
-          <div className="review-overview-status">
-            <span className={`review-status-pill ${documentReady ? 'ready' : 'attention'}`}>
-              {reviewStatusLabel}
-            </span>
-            <span className="review-status-pill subtle">Current tool: {activeToolConfig.title}</span>
-          </div>
-        </div>
-        <div className="review-overview-card review-overview-metrics">
-          <div className="review-metric-chip">
-            <strong>{numPages || 0}</strong>
-            <span>Pages</span>
-          </div>
-          <div className="review-metric-chip">
-            <strong>{objects.length}</strong>
-            <span>Annotations</span>
-          </div>
-          <div className="review-metric-chip">
-            <strong>{pageIssueCount}</strong>
-            <span>Review items</span>
-          </div>
-          <div className="review-metric-chip">
-            <strong>{evidenceCount}</strong>
-            <span>Evidence refs</span>
-          </div>
-        </div>
-        <div className="review-overview-card review-overview-actions">
-          <button type="button" className="btn-primary" onClick={onHandleOpen} disabled={!pdfjsReady}>
-            {renderDoc ? 'Open Different PDF' : 'Open PDF'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onRunSuggestedAction('Summarize current page')}
-            disabled={!renderDoc}
-          >
-            Summarize Page
-          </button>
-          <button type="button" className="btn-secondary" onClick={onHandleInsertPdfPages} disabled={!renderDoc}>
-            Insert PDF Pages
-          </button>
-        </div>
-      </div>
-
-      <div className="review-action-bar">
-        <button type="button" className="btn-secondary" onClick={onHandleOpen} disabled={!pdfjsReady}>
-          Open PDF
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${activeTool === 'highlight' ? 'active' : ''}`}
-          onClick={() => onHandleToolChange('highlight')}
-          disabled={!renderDoc}
-        >
-          Highlight
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${activeTool === 'draw' ? 'active' : ''}`}
-          onClick={() => onHandleToolChange('draw')}
-          disabled={!renderDoc}
-        >
-          Draw
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${activeTool === 'text' ? 'active' : ''}`}
-          onClick={() => onHandleToolChange('text')}
-          disabled={!renderDoc}
-        >
-          Text
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${activeTool === 'signature' ? 'active' : ''}`}
-          onClick={() => onHandleToolChange('signature')}
-          disabled={!renderDoc}
-        >
-          Signature
-        </button>
-        <button type="button" className="btn-secondary" onClick={onHandleInsertPdfPages} disabled={!renderDoc}>
-          Insert PDF Pages
-        </button>
-        <button type="button" className="btn-secondary" onClick={() => onRunSuggestedAction('Summarize current page')} disabled={!renderDoc}>
-          Summarize Page
-        </button>
-        <button type="button" className="btn-secondary" onClick={onHandleOpen} disabled={!pdfjsReady}>
-          Open Different PDF
-        </button>
-      </div>
-
-      <div className="review-layout">
+      <div className={`review-layout ${inspectorCollapsed ? 'inspector-collapsed' : ''}`}>
         <div className="review-panel-left">
           <div className="tool-rail">
             {[
@@ -388,50 +281,6 @@ export default function ReviewWorkspace({
                 </button>
               );
             })}
-          </div>
-
-          <div className="review-document-summary">
-            <div className="context-card">
-              <div className="context-card-title">Document</div>
-              <div className="workspace-list">
-                <div className="workspace-list-row">
-                  <span>File</span>
-                  <strong>{fileName}</strong>
-                </div>
-                <div className="workspace-list-row">
-                  <span>Page</span>
-                  <strong>{currentPage} / {numPages || 0}</strong>
-                </div>
-                <div className="workspace-list-row">
-                  <span>Zoom</span>
-                  <strong>{Math.round(zoom * 100)}%</strong>
-                </div>
-                <div className="workspace-list-row">
-                  <span>Watermark</span>
-                  <strong>{watermarkText ? 'Enabled' : 'None'}</strong>
-                </div>
-              </div>
-            </div>
-            <div className="context-card review-readiness-card">
-              <div className="context-card-title">Review Readiness</div>
-              <div className="workspace-list">
-                <div className="workspace-list-row">
-                  <span>Current tool</span>
-                  <strong>{activeToolConfig.title}</strong>
-                </div>
-                <div className="workspace-list-row">
-                  <span>Current page issues</span>
-                  <strong>{pageIssueCount}</strong>
-                </div>
-                <div className="workspace-list-row">
-                  <span>Evidence references</span>
-                  <strong>{evidenceCount}</strong>
-                </div>
-              </div>
-              <div className={`review-readiness-note ${documentReady ? 'ready' : 'attention'}`}>
-                {reviewStatusLabel}
-              </div>
-            </div>
           </div>
         </div>
 
@@ -469,6 +318,7 @@ export default function ReviewWorkspace({
                   onImagePlacementCancel={onImagePlacementCancel}
                   toolDefaults={toolDefaults}
                   pdfjsReady={pdfjsReady}
+                  onOpen={onHandleOpen}
                 />
               </div>
             </div>
@@ -482,15 +332,29 @@ export default function ReviewWorkspace({
           </div>
         </div>
 
-        <div className="review-panel-right">
-          <ContextInspector
-            tabs={reviewTabs}
-            activeTab={reviewPanelTab}
-            onTabChange={onReviewPanelTabChange}
+        {inspectorCollapsed ? (
+          <button
+            type="button"
+            className="review-panel-reopen"
+            onClick={onToggleInspector}
+            title="Show review panel"
+            aria-label="Show review panel"
           >
-            {panelContent}
-          </ContextInspector>
-        </div>
+            <PanelRightOpen size={16} />
+            <span>Panel</span>
+          </button>
+        ) : (
+          <div className="review-panel-right">
+            <ContextInspector
+              tabs={reviewTabs}
+              activeTab={reviewPanelTab}
+              onTabChange={onReviewPanelTabChange}
+              onCollapse={onToggleInspector}
+            >
+              {panelContent}
+            </ContextInspector>
+          </div>
+        )}
       </div>
     </section>
   );
