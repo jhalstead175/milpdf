@@ -34,6 +34,9 @@ export function replaceRunText(content, run, newText) {
 }
 
 export async function applyTextEdit(pdfBytes, pageNumber, run, newText) {
+  if (run.editable === false) {
+    throw new Error('This text uses an embedded font that cannot be edited in place yet.');
+  }
   const content = await getPageContent(pdfBytes, pageNumber);
   const newContent = replaceRunText(content, run, newText);
 

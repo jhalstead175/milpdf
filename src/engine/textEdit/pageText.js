@@ -1,12 +1,13 @@
 // Extract a page's text runs straight from PDF bytes.
 //
 // Bridges pdf-lib (structure) and the tokenizer/extractor: pulls the page's
-// content stream(s) and runs extractTextRuns. Decoding uses pdf-lib's own
-// decodePDFRawStream, which handles FlateDecode (and other filters) in pure JS
-// — works identically in the browser and Node, with no platform stream API.
+// content stream(s) and runs extractTextRuns, then annotates each run with
+// whether its font is safely editable in place (see fontInfo). Decoding uses
+// pdf-lib's own decodePDFRawStream (pure JS, browser + Node).
 
 import { PDFDocument, PDFArray, decodePDFRawStream } from 'pdf-lib';
 import { extractTextRuns } from './textRuns';
+import { getPageFontMap } from './fontInfo';
 
 function decodeStreamBytes(stream) {
   try {
@@ -16,20 +17,14 @@ function decodeStreamBytes(stream) {
   }
 }
 
-export async function getPageContent(pdfBytes, pageNumber) {
-  const doc = await PDFDocument.load(pdfBytes);
-  const page = doc.getPages()[pageNumber - 1];
-  if (!page) return '';
-
+function decodePageContent(doc, page) {
   const resolved = doc.context.lookup(page.node.Contents());
   if (!resolved) return '';
-
   // Contents may be a single stream or an array of streams (concatenated).
   // Use instanceof, not constructor.name — bundlers mangle class names.
   const streams = resolved instanceof PDFArray
     ? resolved.asArray().map((ref) => doc.context.lookup(ref))
     : [resolved];
-
   const parts = [];
   for (const s of streams) {
     if (!s) continue;
@@ -38,6 +33,20 @@ export async function getPageContent(pdfBytes, pageNumber) {
   return parts.join('\n');
 }
 
+export async function getPageContent(pdfBytes, pageNumber) {
+  const doc = await PDFDocument.load(pdfBytes);
+  const page = doc.getPages()[pageNumber - 1];
+  return page ? decodePageContent(doc, page) : '';
+}
+
 export async function getPageRuns(pdfBytes, pageNumber) {
-  return extractTextRuns(await getPageContent(pdfBytes, pageNumber));
+  const doc = await PDFDocument.load(pdfBytes);
+  const page = doc.getPages()[pageNumber - 1];
+  if (!page) return [];
+  const content = decodePageContent(doc, page);
+  const fontMap = getPageFontMap(doc, page);
+  return extractTextRuns(content).map((run) => {
+    const info = fontMap.get(run.fontRef);
+    return { ...run, editable: info ? info.editable : false, fontSubtype: info?.subtype ?? null };
+  });
 }

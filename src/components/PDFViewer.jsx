@@ -537,6 +537,7 @@ export default function PDFViewer({
     setTextEditTarget({
       run,
       value: run.text,
+      editable: run.editable !== false,
       left: screen.left,
       top: screen.top,
       width: Math.max(screen.width, 60),
@@ -547,8 +548,8 @@ export default function PDFViewer({
 
   const commitTextEdit = useCallback(() => {
     if (!textEditTarget) return;
-    const { run, value } = textEditTarget;
-    if (value !== run.text && value.trim() !== '') onTextEdit(currentPage, run, value);
+    const { run, value, editable } = textEditTarget;
+    if (editable && value !== run.text && value.trim() !== '') onTextEdit(currentPage, run, value);
     setTextEditTarget(null);
   }, [textEditTarget, onTextEdit, currentPage]);
 
@@ -1044,34 +1045,58 @@ export default function PDFViewer({
           )}
 
           {textEditTarget && (
-            <input
-              className="text-edit-inline"
-              autoFocus
-              value={textEditTarget.value}
-              onChange={(e) => setTextEditTarget((t) => (t ? { ...t, value: e.target.value } : t))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
-                else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
-              }}
-              onBlur={commitTextEdit}
-              style={{
-                position: 'absolute',
-                left: textEditTarget.left,
-                top: textEditTarget.top,
-                width: textEditTarget.width,
-                minHeight: textEditTarget.height,
-                fontSize: textEditTarget.fontSize,
-                lineHeight: 1.1,
-                padding: '0 2px',
-                margin: 0,
-                border: '1px solid #4063ff',
-                background: '#ffffff',
-                color: '#000000',
-                boxSizing: 'border-box',
-                pointerEvents: 'auto',
-                zIndex: 60,
-              }}
-            />
+            <>
+              <input
+                className="text-edit-inline"
+                autoFocus
+                readOnly={!textEditTarget.editable}
+                title={textEditTarget.editable ? 'Edit text — Enter to apply, Esc to cancel' : 'This text uses an embedded font that can’t be edited in place yet'}
+                value={textEditTarget.value}
+                onChange={(e) => setTextEditTarget((t) => (t && t.editable ? { ...t, value: e.target.value } : t))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
+                  else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
+                }}
+                onBlur={commitTextEdit}
+                style={{
+                  position: 'absolute',
+                  left: textEditTarget.left,
+                  top: textEditTarget.top,
+                  width: textEditTarget.width,
+                  minHeight: textEditTarget.height,
+                  fontSize: textEditTarget.fontSize,
+                  lineHeight: 1.1,
+                  padding: '0 2px',
+                  margin: 0,
+                  border: `1px solid ${textEditTarget.editable ? '#4063ff' : '#d9534f'}`,
+                  background: textEditTarget.editable ? '#ffffff' : '#fff5f5',
+                  color: '#000000',
+                  boxSizing: 'border-box',
+                  pointerEvents: 'auto',
+                  zIndex: 60,
+                }}
+              />
+              {!textEditTarget.editable && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: textEditTarget.left,
+                    top: textEditTarget.top + textEditTarget.height + 2,
+                    fontSize: 11,
+                    color: '#d9534f',
+                    background: '#fff5f5',
+                    border: '1px solid #d9534f',
+                    borderRadius: 3,
+                    padding: '1px 4px',
+                    pointerEvents: 'none',
+                    zIndex: 60,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Embedded font — in-place edit not supported yet
+                </div>
+              )}
+            </>
           )}
 
           {activeTool === 'edit' && !editInput && contentBlocks.map((block, i) => (
