@@ -10,16 +10,16 @@ html.editor-active #root {
 }
 
 .app {
-  /* Urban grey/slate accent (steel) on a light neutral base. */
-  --app-accent: #4f6175;
-  --app-accent-strong: #3c4c5e;
-  --app-accent-soft: rgba(79, 97, 117, 0.14);
-  --app-accent-muted: rgba(79, 97, 117, 0.08);
-  --app-accent-border: rgba(79, 97, 117, 0.30);
-  --app-accent-border-strong: rgba(79, 97, 117, 0.52);
-  --app-accent-glow: rgba(79, 97, 117, 0.16);
-  --app-accent-glow-strong: rgba(60, 76, 94, 0.20);
-  --app-accent-line: rgba(79, 97, 117, 0.24);
+  /* MilPDF orange accent on a light neutral grey base. */
+  --app-accent: #d96e22;
+  --app-accent-strong: #bd590f;
+  --app-accent-soft: rgba(217, 110, 34, 0.14);
+  --app-accent-muted: rgba(217, 110, 34, 0.08);
+  --app-accent-border: rgba(217, 110, 34, 0.34);
+  --app-accent-border-strong: rgba(217, 110, 34, 0.58);
+  --app-accent-glow: rgba(217, 110, 34, 0.18);
+  --app-accent-glow-strong: rgba(189, 89, 15, 0.22);
+  --app-accent-line: rgba(217, 110, 34, 0.26);
   --app-surface-base: #e7e9ee;
   --app-surface-panel: #f1f3f6;
   --app-surface-panel-strong: #eaecf1;
@@ -36,7 +36,7 @@ html.editor-active #root {
   --app-canvas-bg: #d7dae1;
   --app-surface-2: #eaecf1;
   --app-border-hard: #c6ccd6;
-  --app-on-accent: #f7f9fb;
+  --app-on-accent: #fff7f0;
   /* Subtle digitised (pixel) camo tile in slate tones — used only as small accents. */
   --app-camo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2225%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2235%22%20y%3D%220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2215%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2225%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2210%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2215%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2225%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2215%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%225%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2215%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%2346566a%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%236f7f92%22%2F%3E%3Crect%20x%3D%2225%22%20y%3D%2220%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%220%22%20y%3D%2225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2210%22%20y%3D%2225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2225%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2230%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3Crect%20x%3D%2225%22%20y%3D%2230%22%20width%3D%225%22%20height%3D%225%22%20fill%3D%22%235a6b7e%22%2F%3E%3C%2Fsvg%3E");
   display: flex;
@@ -605,7 +605,7 @@ html.editor-active #root {
   right: 0;
   height: 1px;
   top: 18%;
-  background: linear-gradient(90deg, transparent, rgba(79, 97, 117, 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(217, 110, 34, 0.5), transparent);
   opacity: 0;
   pointer-events: none;
   z-index: 1;
@@ -891,12 +891,9 @@ html.editor-active #root {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: var(--app-camo), var(--app-accent);
-  background-size: 20px 20px;
-  image-rendering: pixelated;
+  background: var(--app-accent);
   color: var(--app-on-accent);
   font-weight: 700;
-  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.55);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
 }
 

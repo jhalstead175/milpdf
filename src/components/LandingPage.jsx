@@ -52,7 +52,7 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
         <div className="landing-nav-inner">
           <div className="landing-nav-brand">
             <img src="./images/milpdf_offwht_500x500.png" alt="MilPDF" className="landing-nav-logo" />
-            <span className="landing-nav-wordmark">MilPDF</span>
+            <span className="landing-nav-wordmark"><span className="wordmark-mil">Mil</span>PDF</span>
           </div>
           <div className="landing-nav-links">
             <a href="#features">Features</a>
@@ -70,11 +70,15 @@ export default function LandingPage({ onLaunchEditor, onDownloadDesktop }) {
         <div className="hero-grid-overlay" />
         <div className="hero-glow" />
         <div className="hero-content">
-          <img
-            src="./images/milpdf_offwht_1000x1000.svg"
-            alt="MilPDF"
-            className="hero-logo"
-          />
+          <div className="hero-logo-wrap">
+            <span className="hero-radar" aria-hidden="true" />
+            <img
+              src="./images/milpdf_offwht_1000x1000.svg"
+              alt="MilPDF"
+              className="hero-logo"
+            />
+          </div>
+          <p className="hero-eyebrow">// Tactical Document Workbench</p>
           <h1 className="hero-title">
             <span className="hero-title-mil">Mil</span>PDF
           </h1>
