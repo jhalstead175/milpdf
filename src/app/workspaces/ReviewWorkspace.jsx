@@ -1,5 +1,5 @@
 import {
-  MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser,
+  MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -364,6 +364,7 @@ export default function ReviewWorkspace({
               { id: 'draw', icon: Pencil, label: 'Draw' },
               { id: 'text', icon: Type, label: 'Text' },
               { id: 'note', icon: PenTool, label: 'Signature' },
+              { id: 'redact', icon: ShieldOff, label: 'Redact' },
               { id: 'eraser', icon: Eraser, label: 'Whiteout' },
             ].map((item) => {
               const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
