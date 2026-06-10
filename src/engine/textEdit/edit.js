@@ -1,14 +1,18 @@
-// Apply an in-place text edit: replace a located run's text and write the
-// page's content stream back. Phase 3 of in-place editing.
+// Apply an in-place text edit and write the page's content stream back.
 //
-// SCOPE / LIMITATION: the new text is encoded as a hex string of byte codes,
-// which is correct for simple fonts with ASCII/WinAnsi-style encoding (the
-// common case, and what pdf-lib emits). Subset/Type0/CID fonts map byte codes
-// to glyph ids, so naive encoding would be wrong there — that's the Phase 4
-// font strategy. Characters outside a single byte fall back to '?' for now.
+// Two strategies:
+//  - Editable run (simple ASCII/WinAnsi font): replace the string operand in
+//    place, keeping the original font (perfect fidelity). Phase 3.
+//  - Non-editable run (Type0/CID, subset, etc.): SUBSTITUTE a standard font for
+//    just that run — wrap the show op with `/Subst size Tf ... Tj /Orig size Tf`
+//    so following text keeps the original font. The edited run renders in
+//    Helvetica (typeface changes), but it renders correctly and is searchable.
+//    Phase 4b/2.
 
-import { PDFDocument, PDFName } from 'pdf-lib';
+import { PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
 import { getPageContent } from './pageText';
+
+const SUBST_FONT_NAME = 'MilPDFEdit';
 
 const toLatin1Bytes = (str) => {
   const out = new Uint8Array(str.length);
@@ -16,7 +20,7 @@ const toLatin1Bytes = (str) => {
   return out;
 };
 
-// Encode text as a PDF hex-string operand: <48656C...>.
+// Encode text as a PDF hex-string operand: <48656C...> (WinAnsi byte codes).
 export function encodeHexString(text) {
   let hex = '';
   for (const ch of text) {
@@ -27,27 +31,50 @@ export function encodeHexString(text) {
 }
 
 // Splice a new string operand into the content at the run's byte range.
-// Works for Tj (single string) and TJ (range spans the array's string parts;
-// the surrounding [ ] / TJ stay intact, yielding [ <new> ] TJ).
 export function replaceRunText(content, run, newText) {
   return content.slice(0, run.strByteStart) + encodeHexString(newText) + content.slice(run.strByteEnd);
 }
 
-export async function applyTextEdit(pdfBytes, pageNumber, run, newText) {
-  if (run.editable === false) {
-    throw new Error('This text uses an embedded font that cannot be edited in place yet.');
+async function registerSubstituteFont(doc, page) {
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  let resources = doc.context.lookup(page.node.get(PDFName.of('Resources')));
+  if (!resources && typeof page.node.Resources === 'function') {
+    resources = doc.context.lookup(page.node.Resources());
   }
-  const content = await getPageContent(pdfBytes, pageNumber);
-  const newContent = replaceRunText(content, run, newText);
+  if (!resources) {
+    resources = doc.context.obj({});
+    page.node.set(PDFName.of('Resources'), doc.context.register(resources));
+  }
+  let fontRes = doc.context.lookup(resources.get(PDFName.of('Font')));
+  if (!fontRes) {
+    fontRes = doc.context.obj({});
+    resources.set(PDFName.of('Font'), doc.context.register(fontRes));
+  }
+  fontRes.set(PDFName.of(SUBST_FONT_NAME), font.ref);
+  return SUBST_FONT_NAME;
+}
 
+export async function applyTextEdit(pdfBytes, pageNumber, run, newText) {
+  const content = await getPageContent(pdfBytes, pageNumber);
   const doc = await PDFDocument.load(pdfBytes);
   const page = doc.getPages()[pageNumber - 1];
   if (!page) throw new Error(`Page ${pageNumber} not found`);
 
-  // Replace the page's content with one fresh stream holding the edited bytes.
-  const stream = doc.context.stream(toLatin1Bytes(newContent));
-  const ref = doc.context.register(stream);
-  page.node.set(PDFName.of('Contents'), ref);
+  let newContent;
+  if (run.editable === false) {
+    // Substitute a standard font for this run, restoring the original after.
+    if (run.opByteStart == null || run.opByteEnd == null) {
+      throw new Error('This text run cannot be edited in place.');
+    }
+    const subst = await registerSubstituteFont(doc, page);
+    const size = run.fontSize || 12;
+    const seq = `/${subst} ${size} Tf ${encodeHexString(newText)} Tj /${run.fontRef} ${size} Tf`;
+    newContent = content.slice(0, run.opByteStart) + seq + content.slice(run.opByteEnd);
+  } else {
+    newContent = replaceRunText(content, run, newText);
+  }
 
+  const stream = doc.context.stream(toLatin1Bytes(newContent));
+  page.node.set(PDFName.of('Contents'), doc.context.register(stream));
   return doc.save();
 }

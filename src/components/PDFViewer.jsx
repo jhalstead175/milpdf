@@ -534,9 +534,11 @@ export default function PDFViewer({
     if (!run) { setTextEditTarget(null); return; }
     const box = estimateRunBox(run);
     const screen = pdfRectToScreen(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    const initial = run.displayText ?? run.text;
     setTextEditTarget({
       run,
-      value: run.displayText ?? run.text,
+      value: initial,
+      original: initial,
       editable: run.editable !== false,
       left: screen.left,
       top: screen.top,
@@ -548,8 +550,8 @@ export default function PDFViewer({
 
   const commitTextEdit = useCallback(() => {
     if (!textEditTarget) return;
-    const { run, value, editable } = textEditTarget;
-    if (editable && value !== run.text && value.trim() !== '') onTextEdit(currentPage, run, value);
+    const { run, value, original } = textEditTarget;
+    if (value !== original && value.trim() !== '') onTextEdit(currentPage, run, value);
     setTextEditTarget(null);
   }, [textEditTarget, onTextEdit, currentPage]);
 
@@ -1049,10 +1051,9 @@ export default function PDFViewer({
               <input
                 className="text-edit-inline"
                 autoFocus
-                readOnly={!textEditTarget.editable}
-                title={textEditTarget.editable ? 'Edit text — Enter to apply, Esc to cancel' : 'This text uses an embedded font that can’t be edited in place yet'}
+                title={textEditTarget.editable ? 'Edit text — Enter to apply, Esc to cancel' : 'Editing switches this text to a standard font'}
                 value={textEditTarget.value}
-                onChange={(e) => setTextEditTarget((t) => (t && t.editable ? { ...t, value: e.target.value } : t))}
+                onChange={(e) => setTextEditTarget((t) => (t ? { ...t, value: e.target.value } : t))}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
                   else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
@@ -1068,8 +1069,8 @@ export default function PDFViewer({
                   lineHeight: 1.1,
                   padding: '0 2px',
                   margin: 0,
-                  border: `1px solid ${textEditTarget.editable ? '#4063ff' : '#d9534f'}`,
-                  background: textEditTarget.editable ? '#ffffff' : '#fff5f5',
+                  border: `1px solid ${textEditTarget.editable ? '#4063ff' : '#d9822b'}`,
+                  background: '#ffffff',
                   color: '#000000',
                   boxSizing: 'border-box',
                   pointerEvents: 'auto',
@@ -1083,9 +1084,9 @@ export default function PDFViewer({
                     left: textEditTarget.left,
                     top: textEditTarget.top + textEditTarget.height + 2,
                     fontSize: 11,
-                    color: '#d9534f',
-                    background: '#fff5f5',
-                    border: '1px solid #d9534f',
+                    color: '#8a5400',
+                    background: '#fff7e6',
+                    border: '1px solid #d9822b',
                     borderRadius: 3,
                     padding: '1px 4px',
                     pointerEvents: 'none',
@@ -1093,7 +1094,7 @@ export default function PDFViewer({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  Embedded font — in-place edit not supported yet
+                  Editing switches this text to a standard font
                 </div>
               )}
             </>

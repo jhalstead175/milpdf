@@ -70,7 +70,7 @@ export function extractTextRuns(content) {
         const s = lastString();
         if (s) {
           const trm = mul(tm, ctm);
-          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t });
+          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
         }
         break;
       }
@@ -78,7 +78,7 @@ export function extractTextRuns(content) {
         const s = lastString();
         if (s) {
           const trm = mul(tm, ctm);
-          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t });
+          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
         }
         break;
       }
@@ -91,7 +91,7 @@ export function extractTextRuns(content) {
         }
         if (first) {
           const trm = mul(tm, ctm);
-          runs.push({ text, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: first.start, strByteEnd: last.end, strKind: 'array', opIndex: t });
+          runs.push({ text, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: first.start, strByteEnd: last.end, strKind: 'array', opIndex: t, opByteStart: operands[0]?.start ?? first.start, opByteEnd: tok.end });
         }
         break;
       }
