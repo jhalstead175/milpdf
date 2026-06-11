@@ -8,19 +8,19 @@
   --lp-bg-raised: #16181d;
   --lp-bg-card: rgba(22, 24, 29, 0.78);
   --lp-border: rgba(148, 163, 184, 0.18);
-  --lp-border-glow: rgba(247, 150, 63, 0.28);
+  --lp-border-glow: rgba(255, 128, 56, 0.28);
   --lp-text: #d8dbe0;
   --lp-text-muted: #9aa0aa;
   --lp-text-bright: #f7f8fa;
-  --lp-accent: #e87b2c;
-  --lp-accent-dim: rgba(232, 123, 44, 0.22);
-  --lp-accent-bright: #f7963f;
+  --lp-accent: #F26419;
+  --lp-accent-dim: rgba(242, 100, 25, 0.22);
+  --lp-accent-bright: #ff8038;
   --lp-heading: #f7f8fa;
-  --lp-glow: radial-gradient(ellipse 600px 400px at 50% 0%, rgba(232, 123, 44, 0.12) 0%, transparent 70%);
+  --lp-glow: radial-gradient(ellipse 600px 400px at 50% 0%, rgba(242, 100, 25, 0.12) 0%, transparent 70%);
   font-family: 'IBM Plex Sans', 'Inter', 'Segoe UI', sans-serif;
   color: var(--lp-text);
   background:
-    radial-gradient(circle at top left, rgba(232, 123, 44, 0.09), transparent 28%),
+    radial-gradient(circle at top left, rgba(242, 100, 25, 0.09), transparent 28%),
     linear-gradient(180deg, #0a0b0e 0%, #0e0f12 100%);
   min-height: 100vh;
   overflow-x: hidden;
@@ -127,12 +127,12 @@
   cursor: pointer;
   letter-spacing: 0.01em;
   transition: all 0.25s;
-  box-shadow: 0 14px 30px rgba(232, 123, 44, 0.18);
+  box-shadow: 0 14px 30px rgba(242, 100, 25, 0.18);
 }
 
 .landing-btn-primary:hover {
-  background: linear-gradient(180deg, #f7963f 0%, #e87b2c 100%);
-  box-shadow: 0 18px 36px rgba(232, 123, 44, 0.22);
+  background: linear-gradient(180deg, #ff8038 0%, #F26419 100%);
+  box-shadow: 0 18px 36px rgba(242, 100, 25, 0.22);
   transform: translateY(-1px);
 }
 
@@ -159,7 +159,7 @@
 .landing-btn-secondary:hover {
   border-color: var(--lp-accent-bright);
   color: var(--lp-text-bright);
-  background: rgba(232, 123, 44, 0.12);
+  background: rgba(242, 100, 25, 0.12);
 }
 
 .landing-btn-secondary svg {
@@ -181,8 +181,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(247, 150, 63, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(247, 150, 63, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255, 128, 56, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 128, 56, 0.03) 1px, transparent 1px);
   background-size: 72px 72px;
   -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 30%, transparent 70%);
   mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 30%, transparent 70%);
@@ -196,7 +196,7 @@
   transform: translateX(-50%);
   width: 900px;
   height: 600px;
-  background: radial-gradient(ellipse at center, rgba(232, 123, 44, 0.09) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(242, 100, 25, 0.09) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -205,7 +205,7 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(247, 150, 63, 0.28), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 128, 56, 0.28), transparent);
   animation: heroScan 10s ease-in-out infinite;
   pointer-events: none;
   opacity: 0.45;
@@ -245,8 +245,8 @@
   border-radius: 50%;
   pointer-events: none;
   background:
-    repeating-radial-gradient(circle at center, rgba(232, 123, 44, 0.08) 0 1px, transparent 1px 34px),
-    radial-gradient(circle at center, rgba(232, 123, 44, 0.06), transparent 68%);
+    repeating-radial-gradient(circle at center, rgba(242, 100, 25, 0.08) 0 1px, transparent 1px 34px),
+    radial-gradient(circle at center, rgba(242, 100, 25, 0.06), transparent 68%);
   -webkit-mask: radial-gradient(circle at center, #000 56%, transparent 74%);
   mask: radial-gradient(circle at center, #000 56%, transparent 74%);
 }
@@ -256,7 +256,7 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(232, 123, 44, 0.24), rgba(232, 123, 44, 0.02) 55deg, transparent 95deg);
+  background: conic-gradient(from 0deg, rgba(242, 100, 25, 0.24), rgba(242, 100, 25, 0.02) 55deg, transparent 95deg);
   animation: radarSweep 6s linear infinite;
 }
 
@@ -269,7 +269,7 @@
   z-index: 1;
   width: 120px;
   height: 120px;
-  filter: drop-shadow(0 0 36px rgba(232, 123, 44, 0.22));
+  filter: drop-shadow(0 0 36px rgba(242, 100, 25, 0.22));
   animation: heroLogoIn 1s ease-out;
 }
 
@@ -399,8 +399,8 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: rgba(232, 123, 44, 0.08);
-  border: 1px solid rgba(232, 123, 44, 0.12);
+  background: rgba(242, 100, 25, 0.08);
+  border: 1px solid rgba(242, 100, 25, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;

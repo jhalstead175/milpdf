@@ -11,15 +11,15 @@ html.editor-active #root {
 
 .app {
   /* MilPDF orange accent on a light neutral grey base. */
-  --app-accent: #d96e22;
-  --app-accent-strong: #bd590f;
-  --app-accent-soft: rgba(217, 110, 34, 0.14);
-  --app-accent-muted: rgba(217, 110, 34, 0.08);
-  --app-accent-border: rgba(217, 110, 34, 0.34);
-  --app-accent-border-strong: rgba(217, 110, 34, 0.58);
-  --app-accent-glow: rgba(217, 110, 34, 0.18);
-  --app-accent-glow-strong: rgba(189, 89, 15, 0.22);
-  --app-accent-line: rgba(217, 110, 34, 0.26);
+  --app-accent: #F26419;
+  --app-accent-strong: #d2500f;
+  --app-accent-soft: rgba(242, 100, 25, 0.14);
+  --app-accent-muted: rgba(242, 100, 25, 0.08);
+  --app-accent-border: rgba(242, 100, 25, 0.34);
+  --app-accent-border-strong: rgba(242, 100, 25, 0.58);
+  --app-accent-glow: rgba(242, 100, 25, 0.18);
+  --app-accent-glow-strong: rgba(210, 80, 15, 0.22);
+  --app-accent-line: rgba(242, 100, 25, 0.26);
   --app-surface-base: #e7e9ee;
   --app-surface-panel: #f1f3f6;
   --app-surface-panel-strong: #eaecf1;
@@ -607,7 +607,7 @@ html.editor-active #root {
   right: 0;
   height: 1px;
   top: 18%;
-  background: linear-gradient(90deg, transparent, rgba(217, 110, 34, 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(242, 100, 25, 0.5), transparent);
   opacity: 0;
   pointer-events: none;
   z-index: 1;
