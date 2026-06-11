@@ -2318,6 +2318,7 @@ const runDD214Analysis = useCallback(async () => {
                   onChange={setWorkspace}
                   collapsed={navCollapsed}
                   onToggleCollapse={toggleNavCollapsed}
+                  busy={loading || !!ocrProgress}
                 />
               )}
               topbar={(
@@ -2472,7 +2473,7 @@ const runDD214Analysis = useCallback(async () => {
 
       {loading && (
         <div className="loading-overlay">
-          <div className="loading-spinner" />
+          <div className="milpdf-shimmer-loader" />
         </div>
       )}
 

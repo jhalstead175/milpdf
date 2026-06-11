@@ -14,7 +14,7 @@ export default function OcrProgressModal({ progress }) {
   return (
     <div className="modal-backdrop">
       <div className="modal ocr-progress" onClick={(e) => e.stopPropagation()}>
-        <div className="loading-spinner" />
+        <div className="milpdf-shimmer-loader" />
         <h3>Scan &amp; OCR</h3>
         <p className="ocr-progress-label">{label}</p>
         {showBar ? (

@@ -6,6 +6,7 @@ export default function PrimaryNav({
   onChange,
   collapsed = false,
   onToggleCollapse,
+  busy = false,
 }) {
   return (
     <nav
@@ -13,7 +14,13 @@ export default function PrimaryNav({
       aria-label="Primary workspace navigation"
     >
       <div className="primary-nav-brand">
-        <span className="primary-nav-logo">M</span>
+        <span
+          className={`primary-nav-logo ${busy ? 'busy' : ''}`}
+          title={busy ? 'Working…' : 'MilPDF'}
+          aria-label={busy ? 'Working' : 'MilPDF'}
+        >
+          <span className="milpdf-mark" />
+        </span>
         {collapsed ? null : (
           <div>
             <div className="primary-nav-title">MilPDF</div>
