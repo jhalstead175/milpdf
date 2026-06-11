@@ -50,6 +50,7 @@
   "dependencies": {
     "docx": "^9.6.1",
     "lucide-react": "^0.577.0",
+    "mupdf": "^1.27.0",
     "openai": "^4.82.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.624",

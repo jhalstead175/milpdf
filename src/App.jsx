@@ -37,6 +37,8 @@ import { buildStampImage } from './utils/stampImage';
 import OrganizePagesModal from './components/OrganizePagesModal';
 import OcrProgressModal from './components/OcrProgressModal';
 import { detectScannedPages, runOcr } from './utils/ocr';
+import PasswordDialog from './components/PasswordDialog';
+import { encryptPdf } from './utils/encrypt';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -311,6 +313,7 @@ function App() {
   const [showStampDialog, setShowStampDialog] = useState(false);
   const [showOrganize, setShowOrganize] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(null);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
@@ -1702,6 +1705,40 @@ const runDD214Analysis = useCallback(async () => {
     }
   }, [pdfBytes, renderDoc, numPages, pageMeta, updateFromResult, pushToast]);
 
+  // Password Protect & Save — embed current edits, encrypt (AES-256), save a copy.
+  // The live document is left editable; only the saved copy is protected.
+  const handleProtectAndSave = useCallback(async (opts) => {
+    if (!pdfBytes) return;
+    setShowPasswordDialog(false);
+    setLoading(true);
+    try {
+      let bytes = pdfBytes;
+      if (objects.length > 0) {
+        bytes = await secureEmbed(bytes, getExportObjects(), layers, renderDoc, { flattenForm: true });
+      }
+      if (watermarkText) {
+        bytes = await addWatermark(bytes, watermarkText);
+      }
+      const encrypted = await encryptPdf(bytes, opts);
+      const outName = fileName.replace(/\.pdf$/i, '') + '_protected.pdf';
+      if (isElectron) {
+        const base64 = btoa(new Uint8Array(encrypted).reduce((s, b) => s + String.fromCharCode(b), ''));
+        await window.electronAPI.saveFileDialog(outName, base64);
+      } else {
+        await saveWithDialog(encrypted, outName);
+      }
+      pushToast({
+        type: 'success',
+        title: 'Protected Copy Saved',
+        message: `${outName} is encrypted and requires a password to open.`,
+      });
+    } catch (err) {
+      alert('Failed to protect PDF: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, objects, getExportObjects, layers, renderDoc, watermarkText, fileName, pushToast]);
+
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
     if (!pdfDoc) return;
@@ -2304,6 +2341,7 @@ const runDD214Analysis = useCallback(async () => {
                     { label: 'Scan & OCR…', onClick: handleRunOcr, disabled: !renderDoc },
                     { label: 'Bates Numbering…', onClick: () => setNumberingMode('bates'), disabled: !renderDoc },
                     { label: 'Page Numbers…', onClick: () => setNumberingMode('page'), disabled: !renderDoc },
+                    { label: 'Password Protect & Save…', onClick: () => setShowPasswordDialog(true), disabled: !renderDoc },
                   ]}
                   onSave={handleSave}
                   onExport={() => setWorkspace('export')}
@@ -2350,6 +2388,13 @@ const runDD214Analysis = useCallback(async () => {
       )}
 
       {ocrProgress && <OcrProgressModal progress={ocrProgress} />}
+
+      {showPasswordDialog && (
+        <PasswordDialog
+          onApply={handleProtectAndSave}
+          onClose={() => setShowPasswordDialog(false)}
+        />
+      )}
 
       {showOrganize && renderDoc && (
         <OrganizePagesModal
