@@ -34,6 +34,7 @@ import { applyBatesNumbers, applyPageNumbers } from './core/evidence/batesEngine
 import NumberingDialog from './components/NumberingDialog';
 import StampDialog from './components/StampDialog';
 import { buildStampImage } from './utils/stampImage';
+import OrganizePagesModal from './components/OrganizePagesModal';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -306,6 +307,7 @@ function App() {
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [numberingMode, setNumberingMode] = useState(null); // 'bates' | 'page' | null
   const [showStampDialog, setShowStampDialog] = useState(false);
+  const [showOrganize, setShowOrganize] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
@@ -665,6 +667,35 @@ function App() {
       setLoading(false);
     }
   }, [pdfDoc, currentPage, updateFromResult]);
+
+  const handleRotatePageAt = useCallback(async (pageNumber, angle) => {
+    if (!pdfDoc) return;
+    setLoading(true);
+    try {
+      const result = await rotatePage(pdfDoc, pageNumber - 1, angle);
+      updateFromResult(result);
+    } catch (err) {
+      alert('Failed to rotate page: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfDoc, updateFromResult]);
+
+  const handleAppendBlankPage = useCallback(async () => {
+    if (!pdfDoc) return;
+    setLoading(true);
+    try {
+      const atIndex = pdfDoc.getPageCount();
+      const result = await addBlankPage(pdfDoc, atIndex);
+      const nextPageIds = pageMeta.map((meta) => meta.id);
+      nextPageIds.splice(atIndex, 0, nextPageMetaId());
+      updateFromResult(result, { pageIds: nextPageIds });
+    } catch (err) {
+      alert('Failed to add blank page: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfDoc, pageMeta, updateFromResult]);
 
   const handleReorder = useCallback(async (fromIndex, toIndex) => {
     if (!pdfBytes) return;
@@ -2225,6 +2256,7 @@ const runDD214Analysis = useCallback(async () => {
                   onClose={handleCloseDocument}
                   onCloseDisabled={!renderDoc}
                   documentActions={[
+                    { label: 'Organize Pages…', onClick: () => setShowOrganize(true), disabled: !renderDoc },
                     { label: 'Bates Numbering…', onClick: () => setNumberingMode('bates'), disabled: !renderDoc },
                     { label: 'Page Numbers…', onClick: () => setNumberingMode('page'), disabled: !renderDoc },
                   ]}
@@ -2269,6 +2301,20 @@ const runDD214Analysis = useCallback(async () => {
         <StampDialog
           onAdd={handleAddStamp}
           onClose={() => setShowStampDialog(false)}
+        />
+      )}
+
+      {showOrganize && renderDoc && (
+        <OrganizePagesModal
+          renderDoc={renderDoc}
+          numPages={numPages}
+          currentPage={currentPage}
+          onReorder={handleReorder}
+          onRotatePage={handleRotatePageAt}
+          onDeletePage={handleDeletePageAt}
+          onAppendBlank={handleAppendBlankPage}
+          onPageSelect={(page) => { setCurrentPageAndScroll(page); setShowOrganize(false); }}
+          onClose={() => setShowOrganize(false)}
         />
       )}
 
