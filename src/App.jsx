@@ -35,6 +35,8 @@ import NumberingDialog from './components/NumberingDialog';
 import StampDialog from './components/StampDialog';
 import { buildStampImage } from './utils/stampImage';
 import OrganizePagesModal from './components/OrganizePagesModal';
+import OcrProgressModal from './components/OcrProgressModal';
+import { detectScannedPages, runOcr } from './utils/ocr';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -308,6 +310,7 @@ function App() {
   const [numberingMode, setNumberingMode] = useState(null); // 'bates' | 'page' | null
   const [showStampDialog, setShowStampDialog] = useState(false);
   const [showOrganize, setShowOrganize] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(null);
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
@@ -1658,6 +1661,47 @@ const runDD214Analysis = useCallback(async () => {
     }
   }, [pdfBytes, numberingMode, pageMeta, updateFromResult, pushToast]);
 
+  // Scan & OCR — auto-detect scanned pages, recognize text, embed an invisible
+  // searchable layer. Runs fully offline (assets bundled under /ocr).
+  const handleRunOcr = useCallback(async () => {
+    if (!pdfBytes || !renderDoc) return;
+    let scanned;
+    try {
+      scanned = await detectScannedPages(renderDoc, numPages);
+    } catch (err) {
+      alert('Failed to scan document: ' + err.message);
+      return;
+    }
+    if (scanned.length === 0) {
+      pushToast({ type: 'info', title: 'No Scans Found', message: 'Every page already has searchable text.' });
+      return;
+    }
+    if (!confirm(`Found ${scanned.length} scanned page${scanned.length === 1 ? '' : 's'}. Run OCR? This may take a moment per page.`)) {
+      return;
+    }
+    setOcrProgress({ phase: 'start', total: scanned.length, index: 0 });
+    try {
+      const onProgress = (m) => setOcrProgress((prev) => {
+        if (m.phase === 'page') return { ...prev, phase: 'page', pageNum: m.pageNum, index: m.index, total: m.total, progress: 0 };
+        if (m.phase === 'recognize') return { ...prev, phase: 'recognize', progress: m.progress };
+        if (m.phase === 'embed') return { ...prev, phase: 'embed' };
+        return prev;
+      });
+      const { bytes, wordsAdded, pagesProcessed } = await runOcr({ pdfBytes, renderDoc, pages: scanned, onProgress });
+      const result = await loadPdf(bytes);
+      updateFromResult(result, { pageIds: pageMeta.map((meta) => meta.id) });
+      pushToast({
+        type: 'success',
+        title: 'OCR Complete',
+        message: `${pagesProcessed} page${pagesProcessed === 1 ? '' : 's'} now searchable (${wordsAdded} words).`,
+      });
+    } catch (err) {
+      alert('OCR failed: ' + err.message);
+    } finally {
+      setOcrProgress(null);
+    }
+  }, [pdfBytes, renderDoc, numPages, pageMeta, updateFromResult, pushToast]);
+
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
     if (!pdfDoc) return;
@@ -2257,6 +2301,7 @@ const runDD214Analysis = useCallback(async () => {
                   onCloseDisabled={!renderDoc}
                   documentActions={[
                     { label: 'Organize Pages…', onClick: () => setShowOrganize(true), disabled: !renderDoc },
+                    { label: 'Scan & OCR…', onClick: handleRunOcr, disabled: !renderDoc },
                     { label: 'Bates Numbering…', onClick: () => setNumberingMode('bates'), disabled: !renderDoc },
                     { label: 'Page Numbers…', onClick: () => setNumberingMode('page'), disabled: !renderDoc },
                   ]}
@@ -2303,6 +2348,8 @@ const runDD214Analysis = useCallback(async () => {
           onClose={() => setShowStampDialog(false)}
         />
       )}
+
+      {ocrProgress && <OcrProgressModal progress={ocrProgress} />}
 
       {showOrganize && renderDoc && (
         <OrganizePagesModal

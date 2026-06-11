@@ -4330,3 +4330,38 @@ html.editor-active #root {
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* ===== OCR progress modal ===== */
+.ocr-progress {
+  max-width: 380px;
+  text-align: center;
+}
+
+.ocr-progress .loading-spinner {
+  margin: 4px auto 14px;
+}
+
+.ocr-progress h3 {
+  margin: 0 0 6px;
+}
+
+.ocr-progress-label {
+  font-size: 13px;
+  color: var(--app-text-dim);
+  margin: 0 0 12px;
+}
+
+.ocr-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--app-surface-2);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.ocr-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--app-accent-strong), var(--app-accent));
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
