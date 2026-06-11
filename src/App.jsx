@@ -26,9 +26,12 @@ import {
   addBlankPage, mergePdf, insertPdf, cropPage, imagesToPdf,
   saveWithDialog, downloadBlob, addWatermark, splitPdf, printPdf,
 } from './utils/pdfUtils';
+import { PDFDocument } from 'pdf-lib';
 import { secureEmbed } from './core/export';
 import { toEngineDocument, documentToEmbedObjects } from './engine/adapter';
 import { applyTextEdit } from './engine/textEdit/edit';
+import { applyBatesNumbers, applyPageNumbers } from './core/evidence/batesEngine';
+import NumberingDialog from './components/NumberingDialog';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -299,6 +302,7 @@ function App() {
   });
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
+  const [numberingMode, setNumberingMode] = useState(null); // 'bates' | 'page' | null
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
@@ -1582,6 +1586,31 @@ const runDD214Analysis = useCallback(async () => {
     pushToast({ type: 'info', title: 'Document Closed', message: 'Open a PDF to start again.' });
   }, [renderDoc, pdfBytes, objects.length, resetObjects, setSelection, setActiveTool, pushToast]);
 
+  // Bates / page numbering — bakes labels onto every page, then reloads.
+  const handleApplyNumbering = useCallback(async (opts) => {
+    if (!pdfBytes || !numberingMode) return;
+    const mode = numberingMode;
+    setNumberingMode(null);
+    setLoading(true);
+    try {
+      const workingDoc = await PDFDocument.load(pdfBytes);
+      if (mode === 'bates') await applyBatesNumbers(workingDoc, opts);
+      else await applyPageNumbers(workingDoc, opts);
+      const bytes = await workingDoc.save();
+      const result = await loadPdf(bytes);
+      updateFromResult(result, { pageIds: pageMeta.map((meta) => meta.id) });
+      pushToast({
+        type: 'success',
+        title: mode === 'bates' ? 'Bates Numbers Added' : 'Page Numbers Added',
+        message: `Applied to ${result.pdfDoc.getPageCount()} pages.`,
+      });
+    } catch (err) {
+      alert('Failed to apply numbering: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfBytes, numberingMode, pageMeta, updateFromResult, pushToast]);
+
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
     if (!pdfDoc) return;
@@ -2178,6 +2207,10 @@ const runDD214Analysis = useCallback(async () => {
                   onOpenDisabled={!pdfjsReady}
                   onClose={handleCloseDocument}
                   onCloseDisabled={!renderDoc}
+                  documentActions={[
+                    { label: 'Bates Numbering…', onClick: () => setNumberingMode('bates'), disabled: !renderDoc },
+                    { label: 'Page Numbers…', onClick: () => setNumberingMode('page'), disabled: !renderDoc },
+                  ]}
                   onSave={handleSave}
                   onExport={() => setWorkspace('export')}
                 />
@@ -2204,6 +2237,14 @@ const runDD214Analysis = useCallback(async () => {
         <SignaturePad
           onSave={handleSignatureSave}
           onClose={() => setShowSignaturePad(false)}
+        />
+      )}
+
+      {numberingMode && (
+        <NumberingDialog
+          mode={numberingMode}
+          onApply={handleApplyNumbering}
+          onClose={() => setNumberingMode(null)}
         />
       )}
 

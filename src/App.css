@@ -4047,3 +4047,81 @@ html.editor-active #root {
   font-size: 12px;
   color: #a6adc8;
 }
+
+/* ===== Top-bar dropdown menu (document actions) ===== */
+.topbar-menu {
+  position: relative;
+}
+
+.topbar-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.topbar-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-card-strong);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+
+.topbar-menu-item {
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.topbar-menu-item:hover:not(:disabled) {
+  background: var(--app-accent-soft);
+}
+
+.topbar-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== Numbering dialog ===== */
+.numbering-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.numbering-field span {
+  font-size: 13px;
+  color: var(--app-text-dim);
+}
+
+.numbering-field input,
+.numbering-field select {
+  flex: 0 0 180px;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-panel);
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.numbering-preview {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  margin: 8px 0 0;
+}
