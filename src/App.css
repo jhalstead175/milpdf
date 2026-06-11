@@ -801,6 +801,8 @@ html.editor-active #root {
 }
 
 .workspace-shell-topbar {
+  position: relative;
+  z-index: 40; /* keep the top bar (and its dropdowns) above the canvas/content */
   border-bottom: 1px solid var(--app-border);
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(14px);
