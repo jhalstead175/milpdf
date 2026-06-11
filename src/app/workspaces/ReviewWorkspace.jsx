@@ -1,7 +1,7 @@
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
-  Crop, Image as ImageIcon,
+  Crop, Image as ImageIcon, Stamp,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -31,6 +31,7 @@ const TOOL_GROUPS = [
   [
     { id: 'note', icon: PenTool, label: 'Signature' },
     { id: 'image', icon: ImageIcon, label: 'Add Image', action: 'import' },
+    { id: 'stamp', icon: Stamp, label: 'Stamp', action: 'stamp' },
   ],
   [
     { id: 'crop', icon: Crop, label: 'Crop Page' },
@@ -79,6 +80,7 @@ export default function ReviewWorkspace({
   onViewerWheel,
   onHandleOpen,
   onImportImages,
+  onOpenStamp,
   onHandleToolChange,
   onHandleToolDefaultChange,
   onSetSelection,
@@ -304,7 +306,9 @@ export default function ReviewWorkspace({
                     const Icon = item.icon;
                     const handleClick = item.action === 'import'
                       ? () => onImportImages?.()
-                      : () => onHandleToolChange(mappedTool);
+                      : item.action === 'stamp'
+                        ? () => onOpenStamp?.()
+                        : () => onHandleToolChange(mappedTool);
 
                     return (
                       <button

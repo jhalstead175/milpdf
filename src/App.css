@@ -4125,3 +4125,62 @@ html.editor-active #root {
   color: var(--app-text-muted);
   margin: 8px 0 0;
 }
+
+/* ===== Stamp dialog ===== */
+.stamp-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.stamp-preset {
+  padding: 12px 10px;
+  border: 2px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.stamp-preset:hover {
+  filter: brightness(0.9);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.stamp-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.stamp-custom-row input[type="text"] {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface-panel);
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.stamp-custom-row input[type="color"] {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+.stamp-date-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--app-text-dim);
+}

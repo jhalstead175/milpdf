@@ -32,6 +32,8 @@ import { toEngineDocument, documentToEmbedObjects } from './engine/adapter';
 import { applyTextEdit } from './engine/textEdit/edit';
 import { applyBatesNumbers, applyPageNumbers } from './core/evidence/batesEngine';
 import NumberingDialog from './components/NumberingDialog';
+import StampDialog from './components/StampDialog';
+import { buildStampImage } from './utils/stampImage';
 import { detectFormFields } from './utils/formDetection';
 import { convertPdfToWord } from './utils/wordExport';
 import { copyObjects, pasteObjects, duplicateObjects } from './editor/clipboard';
@@ -303,6 +305,7 @@ function App() {
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [numberingMode, setNumberingMode] = useState(null); // 'bates' | 'page' | null
+  const [showStampDialog, setShowStampDialog] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
   const [fileName, setFileName] = useState('document.pdf');
   const [loading, setLoading] = useState(false);
@@ -1586,6 +1589,19 @@ const runDD214Analysis = useCallback(async () => {
     pushToast({ type: 'info', title: 'Document Closed', message: 'Open a PDF to start again.' });
   }, [renderDoc, pdfBytes, objects.length, resetObjects, setSelection, setActiveTool, pushToast]);
 
+  // Stamp — render to an image and reuse the image-placement flow (click to place).
+  const handleAddStamp = useCallback((opts) => {
+    try {
+      const { dataUrl, width, height } = buildStampImage(opts);
+      setImagePlacementQueue([{ name: `stamp-${opts.text}`, dataUrl, width, height }]);
+      setActiveTool('image');
+      setShowStampDialog(false);
+      pushToast({ type: 'info', title: 'Stamp Ready', message: 'Click on the page to place the stamp.' });
+    } catch (err) {
+      alert('Failed to build stamp: ' + err.message);
+    }
+  }, [setActiveTool, pushToast]);
+
   // Bates / page numbering — bakes labels onto every page, then reloads.
   const handleApplyNumbering = useCallback(async (opts) => {
     if (!pdfBytes || !numberingMode) return;
@@ -2120,6 +2136,7 @@ const runDD214Analysis = useCallback(async () => {
         onViewerWheel={handleViewerWheel}
         onHandleOpen={handleOpen}
         onImportImages={handleImportImages}
+        onOpenStamp={() => setShowStampDialog(true)}
         onHandleToolChange={handleToolChange}
         onHandleToolDefaultChange={handleToolDefaultChange}
         onSetSelection={setSelection}
@@ -2245,6 +2262,13 @@ const runDD214Analysis = useCallback(async () => {
           mode={numberingMode}
           onApply={handleApplyNumbering}
           onClose={() => setNumberingMode(null)}
+        />
+      )}
+
+      {showStampDialog && (
+        <StampDialog
+          onAdd={handleAddStamp}
+          onClose={() => setShowStampDialog(false)}
         />
       )}
 
