@@ -1319,6 +1319,21 @@ html.editor-active #root {
   text-transform: uppercase;
 }
 
+.tool-rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.tool-rail-divider {
+  width: 22px;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--app-border-strong);
+}
+
 .tool-rail-spacer {
   flex: 1;
 }

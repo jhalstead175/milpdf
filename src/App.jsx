@@ -294,7 +294,9 @@ function App() {
     undo,
     redo,
   } = editorStore;
-  const [signatureDataUrl, setSignatureDataUrl] = useState(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState(() => {
+    try { return localStorage.getItem('milpdf.signature') || null; } catch { return null; }
+  });
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [watermarkText, setWatermarkText] = useState('');
@@ -1555,9 +1557,30 @@ const runDD214Analysis = useCallback(async () => {
   // --- Signature ---
   const handleSignatureSave = useCallback((dataUrl) => {
     setSignatureDataUrl(dataUrl);
+    // Persist so the signature is available in future sessions without re-uploading.
+    try {
+      if (dataUrl) localStorage.setItem('milpdf.signature', dataUrl);
+    } catch { /* ignore quota/private-mode failures */ }
     setShowSignaturePad(false);
     setActiveTool('signature');
   }, [setActiveTool]);
+
+  const handleCloseDocument = useCallback(() => {
+    if (!renderDoc && !pdfBytes) return;
+    if (objects.length > 0 && !confirm('Close this document? Unsaved annotations will be discarded.')) return;
+    setPdfDoc(null);
+    setPdfBytes(null);
+    setRenderDoc(null);
+    setNumPages(0);
+    setCurrentPage(1);
+    resetObjects([]);
+    setSelection([]);
+    setFormProfileKey(null);
+    setWatermarkText('');
+    setFileName('document.pdf');
+    setActiveTool('select');
+    pushToast({ type: 'info', title: 'Document Closed', message: 'Open a PDF to start again.' });
+  }, [renderDoc, pdfBytes, objects.length, resetObjects, setSelection, setActiveTool, pushToast]);
 
   // --- Crop ---
   const handleCropApply = useCallback(async (cropBox) => {
@@ -2067,6 +2090,7 @@ const runDD214Analysis = useCallback(async () => {
         onZoomReset={handleZoomReset}
         onViewerWheel={handleViewerWheel}
         onHandleOpen={handleOpen}
+        onImportImages={handleImportImages}
         onHandleToolChange={handleToolChange}
         onHandleToolDefaultChange={handleToolDefaultChange}
         onSetSelection={setSelection}
@@ -2152,6 +2176,8 @@ const runDD214Analysis = useCallback(async () => {
                   onToggleAssistant={toggleAssistant}
                   onOpen={handleOpen}
                   onOpenDisabled={!pdfjsReady}
+                  onClose={handleCloseDocument}
+                  onCloseDisabled={!renderDoc}
                   onSave={handleSave}
                   onExport={() => setWorkspace('export')}
                 />

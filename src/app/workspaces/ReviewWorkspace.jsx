@@ -1,6 +1,7 @@
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
+  Crop, Image as ImageIcon,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -16,6 +17,29 @@ const REVIEW_TABS = [
   { id: 'pages', label: 'Page List' },
   { id: 'assistant', label: 'AI Review' },
 ];
+
+// Grouped, icon-only tool rail. `action: 'import'` opens the image picker
+// instead of switching the active canvas tool.
+const TOOL_GROUPS = [
+  [
+    { id: 'select', icon: MousePointer2, label: 'Select' },
+    { id: 'highlight', icon: Highlighter, label: 'Highlight' },
+    { id: 'draw', icon: Pencil, label: 'Draw' },
+    { id: 'text', icon: Type, label: 'Text' },
+    { id: 'textedit', icon: SquarePen, label: 'Edit Text' },
+  ],
+  [
+    { id: 'note', icon: PenTool, label: 'Signature' },
+    { id: 'image', icon: ImageIcon, label: 'Add Image', action: 'import' },
+  ],
+  [
+    { id: 'crop', icon: Crop, label: 'Crop Page' },
+    { id: 'redact', icon: ShieldOff, label: 'Redact' },
+    { id: 'eraser', icon: Eraser, label: 'Whiteout' },
+  ],
+];
+
+const TOOL_ALIAS = { note: 'signature', eraser: 'edit' };
 
 export default function ReviewWorkspace({
   renderDoc,
@@ -54,6 +78,7 @@ export default function ReviewWorkspace({
   onZoomReset,
   onViewerWheel,
   onHandleOpen,
+  onImportImages,
   onHandleToolChange,
   onHandleToolDefaultChange,
   onSetSelection,
@@ -270,34 +295,33 @@ export default function ReviewWorkspace({
         ) : (
           <div className="review-panel-left">
             <div className="tool-rail">
-              {[
-                { id: 'select', icon: MousePointer2, label: 'Select' },
-                { id: 'highlight', icon: Highlighter, label: 'Highlight' },
-                { id: 'draw', icon: Pencil, label: 'Draw' },
-                { id: 'text', icon: Type, label: 'Text' },
-                { id: 'textedit', icon: SquarePen, label: 'Edit Text' },
-                { id: 'note', icon: PenTool, label: 'Signature' },
-                { id: 'redact', icon: ShieldOff, label: 'Redact' },
-                { id: 'eraser', icon: Eraser, label: 'Whiteout' },
-              ].map((item) => {
-                const mappedTool = item.id === 'note' ? 'signature' : item.id === 'eraser' ? 'edit' : item.id;
-                const isActive = activeTool === mappedTool;
-                const Icon = item.icon;
+              {TOOL_GROUPS.map((group, groupIndex) => (
+                <div className="tool-rail-group" key={`group-${groupIndex}`}>
+                  {groupIndex > 0 ? <div className="tool-rail-divider" /> : null}
+                  {group.map((item) => {
+                    const mappedTool = TOOL_ALIAS[item.id] || item.id;
+                    const isActive = activeTool === mappedTool;
+                    const Icon = item.icon;
+                    const handleClick = item.action === 'import'
+                      ? () => onImportImages?.()
+                      : () => onHandleToolChange(mappedTool);
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`tool-rail-button ${isActive ? 'active' : ''}`}
-                    onClick={() => onHandleToolChange(mappedTool)}
-                    title={item.label}
-                    aria-label={item.label}
-                    disabled={!renderDoc || !pdfjsReady}
-                  >
-                    <Icon size={16} strokeWidth={1.9} />
-                  </button>
-                );
-              })}
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`tool-rail-button ${isActive ? 'active' : ''}`}
+                        onClick={handleClick}
+                        title={item.label}
+                        aria-label={item.label}
+                        disabled={!renderDoc || !pdfjsReady}
+                      >
+                        <Icon size={16} strokeWidth={1.9} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
               <div className="tool-rail-spacer" />
               <button
                 type="button"

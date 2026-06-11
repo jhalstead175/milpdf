@@ -11,6 +11,8 @@ export default function GlobalTopBar({
   onToggleAssistant,
   onOpen,
   onOpenDisabled = false,
+  onClose,
+  onCloseDisabled = false,
   onSave,
   onExport,
 }) {
@@ -36,6 +38,11 @@ export default function GlobalTopBar({
         {onOpen ? (
           <button type="button" className="btn-secondary" onClick={onOpen} disabled={onOpenDisabled}>
             Open
+          </button>
+        ) : null}
+        {onClose ? (
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={onCloseDisabled}>
+            Close
           </button>
         ) : null}
         <button type="button" className="btn-secondary" onClick={onOpenCommandPalette}>
