@@ -1368,12 +1368,24 @@ const runDD214Analysis = useCallback(async () => {
   }, [objects, selectionIds, handleBatchUpdateObjects]);
 
   const handleToolChange = useCallback((tool) => {
-    if (tool === 'signature' && !signatureDataUrl) {
+    // Always open the signature manager (to reuse, replace, upload, or remove
+    // the saved signature) rather than silently jumping to placement.
+    if (tool === 'signature') {
       setShowSignaturePad(true);
       return;
     }
     setActiveTool(tool);
-  }, [signatureDataUrl, setActiveTool]);
+  }, [setActiveTool]);
+
+  const handleUseSavedSignature = useCallback(() => {
+    setShowSignaturePad(false);
+    setActiveTool('signature');
+  }, [setActiveTool]);
+
+  const handleRemoveSignature = useCallback(() => {
+    setSignatureDataUrl(null);
+    try { localStorage.removeItem('milpdf.signature'); } catch { /* ignore */ }
+  }, []);
 
   const setCurrentPageAndScroll = useCallback((page) => {
     const clampedPage = Math.min(Math.max(page, 1), Math.max(numPages, 1));
@@ -2368,7 +2380,10 @@ const runDD214Analysis = useCallback(async () => {
 
       {showSignaturePad && (
         <SignaturePad
+          savedSignature={signatureDataUrl}
           onSave={handleSignatureSave}
+          onUse={handleUseSavedSignature}
+          onRemove={handleRemoveSignature}
           onClose={() => setShowSignaturePad(false)}
         />
       )}

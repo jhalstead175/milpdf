@@ -4426,3 +4426,56 @@ html.editor-active #root {
   color: #dc2626;
   margin: 8px 0 0;
 }
+
+/* ===== Signature manager (saved signature) ===== */
+.signature-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-panel);
+}
+
+.signature-saved-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--app-text-faint);
+}
+
+.signature-saved-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  padding: 8px;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+    linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: #ffffff;
+}
+
+.signature-saved-preview img {
+  max-width: 100%;
+  max-height: 120px;
+}
+
+.signature-saved-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.signature-saved-actions .btn-primary,
+.signature-saved-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

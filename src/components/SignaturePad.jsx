@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Upload } from 'lucide-react';
+import { Upload, Trash2, PenLine } from 'lucide-react';
 
-export default function SignaturePad({ onSave, onClose }) {
+export default function SignaturePad({ savedSignature, onSave, onUse, onRemove, onClose }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -68,8 +68,7 @@ export default function SignaturePad({ onSave, onClose }) {
 
   const save = useCallback(() => {
     if (!hasDrawn) return;
-    const dataUrl = canvasRef.current.toDataURL('image/png');
-    onSave(dataUrl);
+    onSave(canvasRef.current.toDataURL('image/png'));
   }, [hasDrawn, onSave]);
 
   const handleUpload = useCallback((e) => {
@@ -83,16 +82,13 @@ export default function SignaturePad({ onSave, onClose }) {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        // Draw uploaded image onto canvas with transparent background
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
-        const x = (canvas.width - w) / 2;
-        const y = (canvas.height - h) / 2;
-        ctx.drawImage(img, x, y, w, h);
+        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
         setHasDrawn(true);
       };
       img.src = reader.result;
@@ -104,8 +100,28 @@ export default function SignaturePad({ onSave, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal signature-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Draw Your Signature</h3>
-        <p className="modal-hint">Draw below, or upload an existing signature image</p>
+        <h3>Signature</h3>
+
+        {savedSignature ? (
+          <div className="signature-saved">
+            <span className="signature-saved-label">Saved signature</span>
+            <div className="signature-saved-preview">
+              <img src={savedSignature} alt="Saved signature" />
+            </div>
+            <div className="signature-saved-actions">
+              <button className="btn-primary" onClick={onUse}>
+                <PenLine size={15} strokeWidth={1.8} /> Place on document
+              </button>
+              <button className="btn-secondary" onClick={onRemove}>
+                <Trash2 size={15} strokeWidth={1.8} /> Remove
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <p className="modal-hint">
+          {savedSignature ? 'Or create a new signature:' : 'Draw below, or upload an existing signature image — it will be saved for next time.'}
+        </p>
         <canvas
           ref={canvasRef}
           className="signature-canvas"
@@ -118,9 +134,13 @@ export default function SignaturePad({ onSave, onClose }) {
           onTouchEnd={stopDrawing}
         />
         <div className="modal-actions">
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary"><Upload size={15} strokeWidth={1.8} /> Upload</button>
+          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary">
+            <Upload size={15} strokeWidth={1.8} /> Upload
+          </button>
           <button onClick={clear} className="btn-secondary">Clear</button>
-          <button onClick={save} disabled={!hasDrawn} className="btn-primary">Use Signature</button>
+          <button onClick={save} disabled={!hasDrawn} className="btn-primary">
+            {savedSignature ? 'Save & Replace' : 'Save & Use'}
+          </button>
           <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>
         <input
