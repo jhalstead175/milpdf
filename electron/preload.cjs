@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Request a native save-file dialog
   saveFileDialog: (defaultName, base64Data) =>
     ipcRenderer.invoke('save-file-dialog', { defaultName, data: base64Data }),
+  // PDF encryption (mupdf runs in main process)
+  encryptPdf: (base64Data, opts) => ipcRenderer.invoke('encrypt-pdf', base64Data, opts),
   // Load/save profile data
   loadProfile: () => ipcRenderer.invoke('load-profile'),
   saveProfile: (data) => ipcRenderer.invoke('save-profile', data),

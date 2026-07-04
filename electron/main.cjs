@@ -265,3 +265,25 @@ ipcMain.handle('save-profile', (_event, data) => {
     return false;
   }
 });
+
+// IPC: Encrypt a PDF with AES-256 via mupdf (Node.js native, unavailable in renderer)
+ipcMain.handle('encrypt-pdf', async (_, base64Data, opts) => {
+  try {
+    const mupdf = require('mupdf');
+    const { userPassword = '', ownerPassword = '', allowPrint = true, allowCopy = true } = opts;
+    let p = -4;
+    if (!allowPrint) p &= ~4;
+    if (!allowCopy) p &= ~16;
+    const bytes = Buffer.from(base64Data, 'base64');
+    const doc = mupdf.PDFDocument.openDocument(bytes, 'application/pdf');
+    const encOpts = ['encrypt=aes-256'];
+    if (userPassword) encOpts.push(`user-password=${userPassword}`);
+    encOpts.push(`owner-password=${ownerPassword || userPassword}`);
+    encOpts.push(`permissions=${p}`);
+    const out = doc.saveToBuffer(encOpts.join(','));
+    return Buffer.from(out.asUint8Array()).toString('base64');
+  } catch (err) {
+    console.error('encrypt-pdf failed:', err);
+    return null;
+  }
+});
