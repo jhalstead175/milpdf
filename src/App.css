@@ -4150,6 +4150,22 @@ html.editor-active #root {
   cursor: not-allowed;
 }
 
+.topbar-menu-divider {
+  border: none;
+  border-top: 1px solid var(--app-border, rgba(255,255,255,0.08));
+  margin: 4px 0;
+}
+
+.topbar-menu-section {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-text-muted, #888);
+  pointer-events: none;
+}
+
 /* ===== Numbering dialog ===== */
 .numbering-field {
   display: flex;

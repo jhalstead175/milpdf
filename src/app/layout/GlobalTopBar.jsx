@@ -74,18 +74,27 @@ export default function GlobalTopBar({
             </button>
             {docMenuOpen ? (
               <div className="topbar-menu-panel" role="menu">
-                {documentActions.map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    role="menuitem"
-                    className="topbar-menu-item"
-                    disabled={action.disabled}
-                    onClick={() => { setDocMenuOpen(false); action.onClick?.(); }}
-                  >
-                    {action.label}
-                  </button>
-                ))}
+                {documentActions.map((action, i) => {
+                  if (action.type === 'divider') {
+                    return <hr key={action.key || `divider-${i}`} className="topbar-menu-divider" />;
+                  }
+                  if (action.type === 'section') {
+                    return <div key={action.label} className="topbar-menu-section">{action.label}</div>;
+                  }
+                  return (
+                    <button
+                      key={action.label}
+                      type="button"
+                      role="menuitem"
+                      className="topbar-menu-item"
+                      disabled={action.disabled}
+                      title={action.title}
+                      onClick={() => { setDocMenuOpen(false); action.onClick?.(); }}
+                    >
+                      {action.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>

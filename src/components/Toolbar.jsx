@@ -17,6 +17,8 @@ export default function Toolbar({
   watermarkText,
   isV3,
   onToggleV3,
+  recentFiles = [],
+  onOpenRecentFile,
 }) {
   const toolbarRef = React.useRef(null);
   const [openMenu, setOpenMenu] = React.useState(null);
@@ -29,19 +31,27 @@ export default function Toolbar({
     { id: 'tool.select', label: 'Select', icon: MousePointer2, disabled: !hasDoc, active: activeTool === 'select' },
   ];
 
+  const fileMenuItems = [
+    { groupLabel: 'Document' },
+    { id: 'file.open', label: 'Open PDF', subLabel: 'Load a document', icon: FolderOpen, disabled: false },
+    { id: 'file.save', label: 'Save PDF', subLabel: 'Export annotations', icon: Save, disabled: !hasDoc },
+    { id: 'file.saveAs', label: 'Save As', subLabel: 'Choose a filename', icon: Save, disabled: !hasDoc },
+    { id: 'file.print', label: 'Print', subLabel: 'Send to printer', icon: Printer, disabled: !hasDoc },
+    { groupLabel: 'Assets' },
+    { id: 'file.importImages', label: 'Import Images', subLabel: 'Place on page', icon: ImagePlus, disabled: !hasDoc },
+  ];
+  if (recentFiles.length > 0) {
+    fileMenuItems.push({ groupLabel: 'Recent' });
+    recentFiles.forEach((rf, i) => {
+      fileMenuItems.push({ id: `file.recent.${i}`, label: rf.name, subLabel: rf.filePath, icon: FolderOpen, recentFilePath: rf.filePath });
+    });
+  }
+
   const menus = [
     {
       id: 'file',
       label: 'File',
-      items: [
-        { groupLabel: 'Document' },
-        { id: 'file.open', label: 'Open PDF', subLabel: 'Load a document', icon: FolderOpen, disabled: false },
-        { id: 'file.save', label: 'Save PDF', subLabel: 'Export annotations', icon: Save, disabled: !hasDoc },
-        { id: 'file.saveAs', label: 'Save As', subLabel: 'Choose a filename', icon: Save, disabled: !hasDoc },
-        { id: 'file.print', label: 'Print', subLabel: 'Send to printer', icon: Printer, disabled: !hasDoc },
-        { groupLabel: 'Assets' },
-        { id: 'file.importImages', label: 'Import Images', subLabel: 'Place on page', icon: ImagePlus, disabled: !hasDoc },
-      ],
+      items: fileMenuItems,
     },
     {
       id: 'pages',
@@ -170,15 +180,20 @@ export default function Toolbar({
                       key={item.id}
                       className="toolbar-menu-item"
                       onClick={() => {
-                        runCommand(item.id);
+                        if (item.recentFilePath) {
+                          onOpenRecentFile?.(item.recentFilePath);
+                        } else {
+                          runCommand(item.id);
+                        }
                         setOpenMenu(null);
                       }}
                       disabled={item.disabled}
+                      title={item.recentFilePath}
                     >
                       <Icon {...IC} />
                       <span className="toolbar-menu-text">
-                        <span>{item.label}</span>
-                        {item.subLabel && <small>{item.subLabel}</small>}
+                        <span className="toolbar-menu-filename">{item.label}</span>
+                        {item.subLabel && !item.recentFilePath && <small>{item.subLabel}</small>}
                       </span>
                     </button>
                   );

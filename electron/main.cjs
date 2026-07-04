@@ -3,10 +3,38 @@ const path = require('path');
 const fs = require('fs');
 
 const PROFILE_FILE = () => path.join(app.getPath('userData'), 'profile.json');
+const RECENT_FILES_FILE = () => path.join(app.getPath('userData'), 'recentFiles.json');
+const MAX_RECENT = 10;
 
 // Keep a global reference so the window isn't garbage-collected
 let mainWindow = null;
 let fileToOpen = null;
+// File data prepared for the renderer to pull on mount (avoids IPC timing race)
+let pendingFileInfo = null;
+
+function loadRecentFiles() {
+  try {
+    const p = RECENT_FILES_FILE();
+    if (!fs.existsSync(p)) return [];
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function addToRecentFiles(name, filePath) {
+  try {
+    let recent = loadRecentFiles().filter(r => r.filePath !== filePath);
+    recent.unshift({ name, filePath });
+    if (recent.length > MAX_RECENT) recent = recent.slice(0, MAX_RECENT);
+    const p = RECENT_FILES_FILE();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(recent), 'utf8');
+    app.addRecentDocument(filePath);
+  } catch {
+    // non-fatal
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -35,24 +63,35 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Once the renderer is ready, send any file that was passed via command line
+  // Prepare any file passed at startup as pendingFileInfo so the renderer
+  // can pull it via get-pending-file once React has mounted (avoids the race
+  // where did-finish-load fires before the onOpenFile listener is registered).
   mainWindow.webContents.on('did-finish-load', () => {
-    if (fileToOpen) {
-      // Check if it's an image file
-      const ext = path.extname(fileToOpen).toLowerCase();
+    if (!fileToOpen) return;
+    const ext = path.extname(fileToOpen).toLowerCase();
+    try {
       if (IMAGE_EXTS.includes(ext)) {
-        // Collect all image files from initial args
         const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-        const imageFiles = args.filter(arg => {
+        const imagePaths = args.filter(arg => {
           const e = path.extname(arg).toLowerCase();
           return IMAGE_EXTS.includes(e) && fs.existsSync(arg);
         });
-        sendImagesToRenderer(imageFiles.length > 0 ? imageFiles : [fileToOpen]);
+        const filePaths = imagePaths.length > 0 ? imagePaths : [fileToOpen];
+        const images = filePaths.map(fp => ({
+          name: path.basename(fp),
+          data: fs.readFileSync(fp).toString('base64'),
+        }));
+        pendingFileInfo = { type: 'images', images };
       } else {
-        sendFileToRenderer(fileToOpen);
+        const buffer = fs.readFileSync(fileToOpen);
+        const name = path.basename(fileToOpen);
+        pendingFileInfo = { type: 'pdf', name, data: buffer.toString('base64') };
+        addToRecentFiles(name, fileToOpen);
       }
-      fileToOpen = null;
+    } catch (err) {
+      console.error('Failed to prepare pending file:', err);
     }
+    fileToOpen = null;
   });
 }
 
@@ -74,6 +113,7 @@ function sendFileToRenderer(filePath) {
         name,
         data: buffer.toString('base64'),
       });
+      addToRecentFiles(name, filePath);
     }
   } catch (err) {
     console.error('Failed to read file:', err);
@@ -154,6 +194,29 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
+// IPC: Let the renderer pull a file that was pending at startup
+ipcMain.handle('get-pending-file', () => {
+  const info = pendingFileInfo;
+  pendingFileInfo = null;
+  return info;
+});
+
+// IPC: Get the list of recently opened files
+ipcMain.handle('get-recent-files', () => loadRecentFiles());
+
+// IPC: Open a file by path (used by recent-files list)
+ipcMain.handle('open-recent-file', async (_, filePath) => {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const name = path.basename(filePath);
+    addToRecentFiles(name, filePath);
+    return { name, data: buffer.toString('base64') };
+  } catch (err) {
+    console.error('Failed to open recent file:', err);
+    return null;
+  }
+});
+
 // IPC: Let the renderer request a native file-open dialog
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -163,10 +226,9 @@ ipcMain.handle('open-file-dialog', async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   const filePath = result.filePaths[0];
   const buffer = fs.readFileSync(filePath);
-  return {
-    name: path.basename(filePath),
-    data: buffer.toString('base64'),
-  };
+  const name = path.basename(filePath);
+  addToRecentFiles(name, filePath);
+  return { name, data: buffer.toString('base64') };
 });
 
 // IPC: Let the renderer save a file via native dialog
