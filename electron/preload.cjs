@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenImages: (callback) => {
     ipcRenderer.on('open-images', (_event, images) => callback(images));
   },
+  // Pull any file that was pending at startup (handles file-association timing race)
+  getPendingFile: () => ipcRenderer.invoke('get-pending-file'),
+  // Recent files list
+  getRecentFiles: () => ipcRenderer.invoke('get-recent-files'),
+  openRecentFile: (filePath) => ipcRenderer.invoke('open-recent-file', filePath),
   // Request a native open-file dialog
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   // Request a native save-file dialog

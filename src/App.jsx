@@ -342,6 +342,7 @@ function App() {
   const jsonInputRef = useRef(null);
   const wheelAccumulatorRef = useRef(0);
   const wheelResetTimeoutRef = useRef(null);
+  const [recentFiles, setRecentFiles] = useState([]);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
   const [imagePlacement, setImagePlacement] = useState(null);
@@ -451,10 +452,20 @@ function App() {
       if (!fileInfo) return;
       const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
       await loadFromBuffer(bytes.buffer, fileInfo.name);
+      setRecentFiles(await window.electronAPI.getRecentFiles());
     } else {
       fileInputRef.current?.click();
     }
   }, [pdfjsReady, loadFromBuffer]);
+
+  const handleOpenRecentFile = useCallback(async (filePath) => {
+    if (!isElectron) return;
+    const fileInfo = await window.electronAPI.openRecentFile(filePath);
+    if (!fileInfo) { alert('Could not open file. It may have been moved or deleted.'); return; }
+    const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
+    await loadFromBuffer(bytes.buffer, fileInfo.name);
+    setRecentFiles(await window.electronAPI.getRecentFiles());
+  }, [loadFromBuffer]);
 
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -1020,28 +1031,49 @@ const runDD214Analysis = useCallback(async () => {
     }
   }, [pushToast, resetObjects, setActiveTool, setSelection, setWorkspace, updateFromResult]);
 
+  const decodeImages = useCallback(async (images) => {
+    const files = images.map(img => {
+      const binary = atob(img.data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const ext = img.name.split('.').pop().toLowerCase();
+      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tiff: 'image/tiff', tif: 'image/tiff' };
+      return new File([bytes], img.name, { type: mimeMap[ext] || 'image/png' });
+    });
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    await queueImagePlacements(files);
+    setView('editor');
+    setWorkspace('review');
+  }, [queueImagePlacements, setView, setWorkspace]);
+
   // --- Listen for files opened via OS file association (Electron) ---
   useEffect(() => {
     if (!isElectron) return;
+
+    // Register listeners for future opens (second-instance, macOS open-file)
     window.electronAPI.onOpenFile(async (fileInfo) => {
       const bytes = Uint8Array.from(atob(fileInfo.data), c => c.charCodeAt(0));
       await loadFromBuffer(bytes.buffer, fileInfo.name);
+      setRecentFiles(await window.electronAPI.getRecentFiles());
     });
-    window.electronAPI.onOpenImages(async (images) => {
-      const files = images.map(img => {
-        const binary = atob(img.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const ext = img.name.split('.').pop().toLowerCase();
-        const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', bmp: 'image/bmp', gif: 'image/gif', webp: 'image/webp', tiff: 'image/tiff', tif: 'image/tiff' };
-        return new File([bytes], img.name, { type: mimeMap[ext] || 'image/png' });
-      });
-      files.sort((a, b) => a.name.localeCompare(b.name));
-      await queueImagePlacements(files);
-      setView('editor');
-      setWorkspace('review');
+    window.electronAPI.onOpenImages(decodeImages);
+
+    // Pull any file pending at startup (handles timing race where did-finish-load
+    // fires before React registers its onOpenFile listener)
+    window.electronAPI.getPendingFile().then(async (pending) => {
+      if (!pending) return;
+      if (pending.type === 'pdf') {
+        const bytes = Uint8Array.from(atob(pending.data), c => c.charCodeAt(0));
+        await loadFromBuffer(bytes.buffer, pending.name);
+        setRecentFiles(await window.electronAPI.getRecentFiles());
+      } else if (pending.type === 'images') {
+        await decodeImages(pending.images);
+      }
     });
-  }, [loadFromBuffer, queueImagePlacements, setView, setWorkspace]);
+
+    // Load initial recent files list
+    window.electronAPI.getRecentFiles().then(setRecentFiles);
+  }, [loadFromBuffer, decodeImages]);
 
   useEffect(() => {
     setImagePlacement(imagePlacementQueue[0] || null);
@@ -2355,6 +2387,11 @@ const runDD214Analysis = useCallback(async () => {
                     { label: 'Bates Numbering…', onClick: () => setNumberingMode('bates'), disabled: !renderDoc },
                     { label: 'Page Numbers…', onClick: () => setNumberingMode('page'), disabled: !renderDoc },
                     { label: 'Password Protect & Save…', onClick: () => setShowPasswordDialog(true), disabled: !renderDoc },
+                    ...(recentFiles.length > 0 ? [
+                      { type: 'divider', key: 'recent-divider' },
+                      { type: 'section', label: 'Recent Files' },
+                      ...recentFiles.map(rf => ({ label: rf.name, onClick: () => handleOpenRecentFile(rf.filePath), title: rf.filePath })),
+                    ] : []),
                   ]}
                   onSave={handleSave}
                   onExport={() => setWorkspace('export')}
