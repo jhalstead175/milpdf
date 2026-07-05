@@ -52,7 +52,7 @@ export default function AvaPanel({
         <div className="ava-avatar-row">
           <img
             className="ava-avatar"
-            src="/images/ava_bridgestone.png"
+            src="./images/ava_bridgestone.png"
             alt="Ava Bridgestone"
           />
           <div className="ava-avatar-text">

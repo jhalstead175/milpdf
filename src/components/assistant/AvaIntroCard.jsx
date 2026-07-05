@@ -8,7 +8,7 @@ export default function AvaIntroCard({
       <div className="ava-intro-header">
         <img
           className="ava-intro-avatar"
-          src="/images/ava_bridgestone.png"
+          src="./images/ava_bridgestone.png"
           alt="Ava Bridgestone"
         />
         <div className="ava-intro-copy">
