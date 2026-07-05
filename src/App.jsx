@@ -2347,7 +2347,7 @@ const runDD214Analysis = useCallback(async () => {
             setWorkspace('review');
           }}
           onDownloadDesktop={() => {
-            window.open('https://github.com/jhalstead175/milpdf/releases', '_blank', 'noopener');
+            window.open('https://github.com/jhalstead175/milpdf/releases/tag/latest-build', '_blank', 'noopener');
           }}
         />
       ) : (
