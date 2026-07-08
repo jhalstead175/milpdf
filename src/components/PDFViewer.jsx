@@ -782,12 +782,12 @@ export default function PDFViewer({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onMouseLeave={handleMouseLeave}
+        onClick={handleCanvasClick}
         onContextMenu={(e) => { e.preventDefault(); onCanvasContextMenu?.(e); }}
       >
         <div className={RENDER_LAYERS.pdf}>
           <canvas
             ref={canvasRef}
-            onClick={handleCanvasClick}
             className={`pdf-canvas tool-${activeTool}`}
           />
         </div>
