@@ -22,22 +22,44 @@ export function createTextTool(ctx) {
     },
 
     onMouseUp() {
-      if (textBoxRect && textBoxRect.width > 5 && textBoxRect.height > 5) {
+      const w = textBoxRect?.width ?? 0;
+      const h = textBoxRect?.height ?? 0;
+      const fontSize = toolDefaults.text?.fontSize || 16;
+
+      if (w > 10 && h > 10) {
+        // Dragged — use the drawn rectangle
         setTextInput({
           x: textBoxRect.x,
           y: textBoxRect.y,
           width: textBoxRect.width,
           height: textBoxRect.height,
           text: '',
-          fontSize: toolDefaults.text?.fontSize || 16,
+          fontSize,
           fontFamily: toolDefaults.text?.fontFamily || 'Helvetica',
           fontWeight: 'normal',
           fontStyle: 'normal',
           color: toolDefaults.text?.color || '#000000',
           alignment: 'left',
         });
-        setTextBoxRect(null);
+      } else if (textBoxStart) {
+        // Single click — place a default-size text box at the click point
+        const defaultW = 200;
+        const defaultH = Math.max(40, fontSize * 2 + 8);
+        setTextInput({
+          x: textBoxStart.x,
+          y: textBoxStart.y,
+          width: defaultW,
+          height: defaultH,
+          text: '',
+          fontSize,
+          fontFamily: toolDefaults.text?.fontFamily || 'Helvetica',
+          fontWeight: 'normal',
+          fontStyle: 'normal',
+          color: toolDefaults.text?.color || '#000000',
+          alignment: 'left',
+        });
       }
+      setTextBoxRect(null);
       setTextBoxStart(null);
     },
     onCancel() {

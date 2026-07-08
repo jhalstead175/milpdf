@@ -117,6 +117,7 @@ export default function PDFViewer({
   imagePlacement,
   onImagePlaced,
   onImagePlacementCancel,
+  onCanvasContextMenu,
   toolDefaults = {},
   pdfjsReady = true,
   pdfBytes = null,
@@ -781,6 +782,7 @@ export default function PDFViewer({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onMouseLeave={handleMouseLeave}
+        onContextMenu={(e) => { e.preventDefault(); onCanvasContextMenu?.(e); }}
       >
         <div className={RENDER_LAYERS.pdf}>
           <canvas

@@ -1,7 +1,8 @@
+import { useState, useCallback } from 'react';
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
-  Crop, Image as ImageIcon, Stamp,
+  Crop, Image as ImageIcon, Stamp, Undo2, RotateCw, Trash2,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -10,6 +11,7 @@ import PDFViewer from '../../components/PDFViewer';
 import EvidencePanel from '../../components/EvidencePanel';
 import ContextInspector from '../panels/ContextInspector';
 import AssistantDock from '../panels/AssistantDock';
+import ContextMenu from '../../components/ContextMenu';
 
 const REVIEW_TABS = [
   { id: 'selection', label: 'Current Tool' },
@@ -104,7 +106,31 @@ export default function ReviewWorkspace({
   onAskAva,
   onRunSuggestedAction,
   assistantDockProps = {},
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+  onDeleteSelected,
+  onCopy,
+  onPaste,
 }) {
+  const [ctxMenu, setCtxMenu] = useState(null); // { x, y }
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+  const handleCanvasContextMenu = useCallback((e) => {
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const ctxMenuItems = [
+    { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !canUndo, onClick: onUndo },
+    { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !canRedo, onClick: onRedo },
+    { type: 'divider' },
+    { label: 'Copy', shortcut: 'Ctrl+C', disabled: selectionIds.length === 0, onClick: onCopy },
+    { label: 'Paste', shortcut: 'Ctrl+V', onClick: onPaste },
+    { label: 'Delete', shortcut: 'Del', disabled: selectionIds.length === 0, onClick: onDeleteSelected },
+    { type: 'divider' },
+    { label: 'Deselect All', disabled: selectionIds.length === 0, onClick: () => onSetSelection([]) },
+  ];
+
   const pageIssueCount = pageAnnotations.length + reviewFindings.length;
   const reviewTabs = REVIEW_TABS.map((tab) => {
     if (tab.id === 'selection') {
@@ -332,6 +358,37 @@ export default function ReviewWorkspace({
               <div className="tool-rail-spacer" />
               <button
                 type="button"
+                className="tool-rail-button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+                aria-label="Undo"
+              >
+                <Undo2 size={16} strokeWidth={1.9} />
+              </button>
+              <button
+                type="button"
+                className="tool-rail-button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                title="Redo (Ctrl+Y)"
+                aria-label="Redo"
+              >
+                <RotateCw size={16} strokeWidth={1.9} />
+              </button>
+              {selectionIds.length > 0 ? (
+                <button
+                  type="button"
+                  className="tool-rail-button tool-rail-danger"
+                  onClick={onDeleteSelected}
+                  title="Delete selected (Del)"
+                  aria-label="Delete selected"
+                >
+                  <Trash2 size={16} strokeWidth={1.9} />
+                </button>
+              ) : null}
+              <button
+                type="button"
                 className="tool-rail-button tool-rail-collapse"
                 onClick={onToggleToolRail}
                 title="Hide tools"
@@ -378,6 +435,7 @@ export default function ReviewWorkspace({
                   toolDefaults={toolDefaults}
                   pdfjsReady={pdfjsReady}
                   onOpen={onHandleOpen}
+                  onCanvasContextMenu={handleCanvasContextMenu}
                 />
               </div>
             </div>
@@ -428,6 +486,14 @@ export default function ReviewWorkspace({
           </div>
         )}
       </div>
+      {ctxMenu ? (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={ctxMenuItems}
+          onClose={closeCtxMenu}
+        />
+      ) : null}
     </section>
   );
 }
