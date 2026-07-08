@@ -1,11 +1,14 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Upload, Trash2, PenLine } from 'lucide-react';
+import { Trash2, PenLine, ImageIcon, UploadCloud } from 'lucide-react';
 
 export default function SignaturePad({ savedSignature, onSave, onUse, onRemove, onClose }) {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [mode, setMode] = useState('draw');
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,36 +69,43 @@ export default function SignaturePad({ savedSignature, onSave, onUse, onRemove, 
     setHasDrawn(false);
   }, []);
 
-  const save = useCallback(() => {
+  const saveDrawing = useCallback(() => {
     if (!hasDrawn) return;
     onSave(canvasRef.current.toDataURL('image/png'));
   }, [hasDrawn, onSave]);
 
-  const handleUpload = useCallback((e) => {
-    const file = e.target.files?.[0];
+  const loadImageFile = useCallback((file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.');
+      alert('Please select an image file (PNG, JPG, GIF, etc.).');
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
-        setHasDrawn(true);
-      };
-      img.src = reader.result;
-    };
+    reader.onload = () => setUploadPreview(reader.result);
     reader.readAsDataURL(file);
-    e.target.value = '';
   }, []);
+
+  const handleFileInput = useCallback((e) => {
+    loadImageFile(e.target.files?.[0]);
+    e.target.value = '';
+  }, [loadImageFile]);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    loadImageFile(e.dataTransfer.files?.[0]);
+  }, [loadImageFile]);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+
+  const saveUpload = useCallback(() => {
+    if (uploadPreview) onSave(uploadPreview);
+  }, [uploadPreview, onSave]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -119,36 +129,99 @@ export default function SignaturePad({ savedSignature, onSave, onUse, onRemove, 
           </div>
         ) : null}
 
-        <p className="modal-hint">
-          {savedSignature ? 'Or create a new signature:' : 'Draw below, or upload an existing signature image — it will be saved for next time.'}
-        </p>
-        <canvas
-          ref={canvasRef}
-          className="signature-canvas"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-        />
-        <div className="modal-actions">
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary">
-            <Upload size={15} strokeWidth={1.8} /> Upload
+        <div className="sig-tabs">
+          <button
+            type="button"
+            className={`sig-tab${mode === 'draw' ? ' active' : ''}`}
+            onClick={() => setMode('draw')}
+          >
+            <PenLine size={14} strokeWidth={1.8} />
+            Draw
           </button>
-          <button onClick={clear} className="btn-secondary">Clear</button>
-          <button onClick={save} disabled={!hasDrawn} className="btn-primary">
-            {savedSignature ? 'Save & Replace' : 'Save & Use'}
+          <button
+            type="button"
+            className={`sig-tab${mode === 'upload' ? ' active' : ''}`}
+            onClick={() => setMode('upload')}
+          >
+            <ImageIcon size={14} strokeWidth={1.8} />
+            Upload Image
           </button>
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>
+
+        {mode === 'draw' ? (
+          <>
+            <canvas
+              ref={canvasRef}
+              className="signature-canvas"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+            />
+            <div className="modal-actions">
+              <button onClick={clear} className="btn-secondary">Clear</button>
+              <button onClick={saveDrawing} disabled={!hasDrawn} className="btn-primary">
+                {savedSignature ? 'Save & Replace' : 'Save & Use'}
+              </button>
+              <button onClick={onClose} className="btn-secondary">Cancel</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {uploadPreview ? (
+              <div className="sig-upload-preview">
+                <img src={uploadPreview} alt="Signature preview" />
+                <button
+                  type="button"
+                  className="sig-upload-clear"
+                  onClick={() => setUploadPreview(null)}
+                  title="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div
+                className={`sig-drop-zone${isDragOver ? ' drag-over' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadCloud size={36} strokeWidth={1.4} className="sig-drop-icon" />
+                <p className="sig-drop-label">Drop an image here</p>
+                <p className="sig-drop-hint">or click to browse (PNG, JPG, GIF…)</p>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse…
+              </button>
+              <button
+                onClick={saveUpload}
+                disabled={!uploadPreview}
+                className="btn-primary"
+              >
+                {savedSignature ? 'Save & Replace' : 'Save & Use'}
+              </button>
+              <button onClick={onClose} className="btn-secondary">Cancel</button>
+            </div>
+          </>
+        )}
+
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           style={{ display: 'none' }}
-          onChange={handleUpload}
+          onChange={handleFileInput}
         />
       </div>
     </div>

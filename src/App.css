@@ -3182,7 +3182,7 @@ html.editor-active #root {
   border-radius: 8px;
   cursor: crosshair;
   display: block;
-  width: 500px;
+  width: min(500px, 100%);
   height: 200px;
   background-image:
     linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
@@ -4510,6 +4510,133 @@ html.editor-active #root {
   gap: 6px;
 }
 
+/* Signature modal — Draw / Upload tabs */
+.sig-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--app-border-hard);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sig-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sig-tab:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.sig-tab.active {
+  background: var(--app-accent);
+  color: #fff;
+}
+
+/* Upload drop zone */
+.sig-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: min(500px, 100%);
+  height: 200px;
+  border: 2px dashed var(--app-border-hard);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--app-surface-panel);
+}
+
+.sig-drop-zone:hover,
+.sig-drop-zone.drag-over {
+  border-color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 8%, transparent);
+}
+
+.sig-drop-zone.drag-over .sig-drop-icon {
+  color: var(--app-accent);
+}
+
+.sig-drop-icon {
+  color: var(--app-text-faint);
+  transition: color 0.15s;
+}
+
+.sig-drop-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--app-text);
+}
+
+.sig-drop-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--app-text-faint);
+}
+
+/* Upload preview */
+.sig-upload-preview {
+  position: relative;
+  width: min(500px, 100%);
+  height: 200px;
+  border: 1px solid var(--app-border-hard);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+    linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: #ffffff;
+}
+
+.sig-upload-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.sig-upload-clear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sig-upload-clear:hover {
+  background: rgba(0,0,0,0.7);
+}
+
 /* ===== Context Menu ===== */
 .ctx-menu {
   background: var(--app-surface-panel-strong, #f1f3f6);
@@ -4564,4 +4691,145 @@ html.editor-active #root {
 /* Tool rail action buttons danger state */
 .tool-rail-button.tool-rail-danger:not(:disabled):hover {
   color: #c0392b;
+}
+
+/* ===== Mobile (≤ 480px) ===== */
+@media (max-width: 480px) {
+  /* Tighter review layout grid */
+  .review-layout {
+    gap: 6px;
+    padding: 6px 8px 10px;
+  }
+
+  /* Tool rail becomes a horizontal scrolling strip */
+  .review-panel-left {
+    height: auto;
+    min-height: 0;
+  }
+
+  .review-panel-left .tool-rail {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    width: 100%;
+    height: 48px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    gap: 2px;
+    border-radius: 10px;
+    justify-content: flex-start;
+    align-items: center;
+    scrollbar-width: none;
+  }
+
+  .review-panel-left .tool-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tool-rail-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .tool-rail-divider {
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+  }
+
+  /* Spacer and collapse button don't apply to horizontal layout */
+  .tool-rail-spacer,
+  .tool-rail-collapse {
+    display: none;
+  }
+
+  /* Inspector panel hidden — too cramped on phones */
+  .review-panel-right {
+    display: none;
+  }
+
+  /* Canvas breathing room */
+  .canvas-stage-inner {
+    padding: 12px 6px 48px;
+  }
+
+  /* Zoom pill is fine; topbar zoom controls can shrink */
+  .acrobat-zoom-controls {
+    gap: 2px;
+  }
+
+  /* Bottom-sheet modals */
+  .modal-backdrop {
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 18px 18px 0 0;
+    padding: 20px 16px 28px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* Signature modal keep canvas legible */
+  .signature-modal {
+    width: 100%;
+  }
+
+  /* Ensure buttons meet 44px touch target */
+  .btn-primary,
+  .btn-secondary {
+    min-height: 44px;
+    padding: 10px 18px;
+  }
+
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Topbar adjustments */
+  .acrobat-topbar {
+    gap: 4px;
+  }
+
+  /* Hide secondary topbar actions that crowd small screens */
+  .acrobat-topbar .acrobat-zoom-controls {
+    display: none;
+  }
+}
+
+/* ===== Small phones (≤ 375px) ===== */
+@media (max-width: 375px) {
+  .review-layout {
+    padding: 4px 6px 8px;
+    gap: 4px;
+  }
+
+  .review-panel-left .tool-rail {
+    height: 44px;
+    padding: 4px 6px;
+  }
+
+  .tool-rail-button {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .canvas-stage-inner {
+    padding: 8px 4px 44px;
+  }
+
+  .acrobat-tab {
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
+  .modal {
+    padding: 16px 12px 24px;
+  }
 }
