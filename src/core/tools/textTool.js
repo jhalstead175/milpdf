@@ -1,12 +1,13 @@
 export function createTextTool(ctx) {
   const {
     setTextBoxStart, setTextBoxRect, textBoxStart, textBoxRect,
-    setTextInput,
+    setTextInput, textInput,
     toolDefaults,
   } = ctx;
 
   return {
     onMouseDown(_e, pos) {
+      if (textInput) return; // let blur on the open text box handle submit
       setTextBoxStart({ x: pos.x, y: pos.y });
       setTextBoxRect(null);
     },
