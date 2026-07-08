@@ -100,6 +100,11 @@ function getActiveToolLabel(tool) {
   if (tool === 'text') return 'Text';
   if (tool === 'signature') return 'Note';
   if (tool === 'edit') return 'Eraser';
+  if (tool === 'textedit') return 'Edit Text';
+  if (tool === 'redact') return 'Redact';
+  if (tool === 'crop') return 'Crop';
+  if (tool === 'image') return 'Image';
+  if (tool === 'stamp') return 'Stamp';
   return 'Select';
 }
 
@@ -1563,10 +1568,19 @@ const runDD214Analysis = useCallback(async () => {
       return {
         key: 'edit',
         title: 'Eraser',
+        hint: 'Drag to draw a whiteout box, or click a highlighted text block to replace it.',
         fields: [
           { key: 'color', label: 'Fill', type: 'color' },
           { key: 'fontSize', label: 'Text Size', type: 'range', min: 10, max: 36, step: 1 },
         ],
+      };
+    }
+    if (activeTool === 'textedit') {
+      return {
+        key: 'textedit',
+        title: 'Edit Text',
+        hint: 'Click on existing text in the PDF to edit it in place.',
+        fields: [],
       };
     }
     if (activeTool === 'redact') {

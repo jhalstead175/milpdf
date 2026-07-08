@@ -143,8 +143,11 @@ export default function ReviewWorkspace({
         <div className="context-card">
           <div className="context-card-title">Active Tool</div>
           <div className="context-tool-name">{activeToolConfig.title}</div>
+          {activeToolConfig.hint ? (
+            <div className="context-tool-hint">{activeToolConfig.hint}</div>
+          ) : null}
           {activeToolConfig.fields.length === 0 ? (
-            <div className="context-muted">No adjustable options for this tool.</div>
+            activeToolConfig.hint ? null : <div className="context-muted">No adjustable options for this tool.</div>
           ) : (
             activeToolConfig.fields.map((field) => {
               const value = toolDefaults[activeToolConfig.key]?.[field.key];
