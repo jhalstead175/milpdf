@@ -122,6 +122,7 @@ export default function PDFViewer({
   pdfjsReady = true,
   pdfBytes = null,
   onTextEdit,
+  onSetActiveTool,
   onOpen,
 }) {
   const canvasRef      = useRef(null);
@@ -596,7 +597,7 @@ export default function PDFViewer({
         // by the engine factory (single schema of record). createBaseObject still
         // supplies the legacy locator fields (page/pageId/transform/zIndex) until
         // the engine document replaces the flat store as the source of truth.
-        onAddObject(createTextObject(createBaseObject('text', rect, 'markup', {
+        const newObj = createTextObject(createBaseObject('text', rect, 'markup', {
           text: textInput.text,
           fontSize: textInput.fontSize || toolDefaults.text?.fontSize || 16,
           fontFamily: textInput.fontFamily || toolDefaults.text?.fontFamily || 'Helvetica',
@@ -606,11 +607,16 @@ export default function PDFViewer({
           alignment: textInput.alignment || 'left',
           lineHeight: 1.2,
           autoHeight: false,
-        })));
+        }));
+        onAddObject(newObj);
+        // Auto-select the new annotation and switch to Select so the user can move it
+        setSelection(new Set([newObj.id]));
+        if (onSelectionChange) onSelectionChange([newObj.id]);
+        if (onSetActiveTool) onSetActiveTool('select');
       }
     }
     setTextInput(null);
-  }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject, toolDefaults]);
+  }, [textInput, screenRectToPdf, onAddObject, onUpdateObject, createBaseObject, toolDefaults, setSelection, onSelectionChange, onSetActiveTool]);
 
   // Only submit when focus leaves the entire text editor container (textarea + format bar).
   const handleTextContainerBlur = useCallback((e) => {

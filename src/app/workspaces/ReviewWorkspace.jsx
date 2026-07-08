@@ -435,6 +435,7 @@ export default function ReviewWorkspace({
                   toolDefaults={toolDefaults}
                   pdfjsReady={pdfjsReady}
                   onOpen={onHandleOpen}
+                  onSetActiveTool={onSetActiveTool}
                   onCanvasContextMenu={handleCanvasContextMenu}
                 />
               </div>
