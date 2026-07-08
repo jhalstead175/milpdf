@@ -4510,6 +4510,133 @@ html.editor-active #root {
   gap: 6px;
 }
 
+/* Signature modal — Draw / Upload tabs */
+.sig-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--app-border-hard);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sig-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  color: var(--app-text-faint);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sig-tab:hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.sig-tab.active {
+  background: var(--app-accent);
+  color: #fff;
+}
+
+/* Upload drop zone */
+.sig-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 500px;
+  height: 200px;
+  border: 2px dashed var(--app-border-hard);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--app-surface-panel);
+}
+
+.sig-drop-zone:hover,
+.sig-drop-zone.drag-over {
+  border-color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 8%, transparent);
+}
+
+.sig-drop-zone.drag-over .sig-drop-icon {
+  color: var(--app-accent);
+}
+
+.sig-drop-icon {
+  color: var(--app-text-faint);
+  transition: color 0.15s;
+}
+
+.sig-drop-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--app-text);
+}
+
+.sig-drop-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--app-text-faint);
+}
+
+/* Upload preview */
+.sig-upload-preview {
+  position: relative;
+  width: 500px;
+  height: 200px;
+  border: 1px solid var(--app-border-hard);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+    linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-color: #ffffff;
+}
+
+.sig-upload-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.sig-upload-clear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sig-upload-clear:hover {
+  background: rgba(0,0,0,0.7);
+}
+
 /* ===== Context Menu ===== */
 .ctx-menu {
   background: var(--app-surface-panel-strong, #f1f3f6);
