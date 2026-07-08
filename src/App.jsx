@@ -308,6 +308,8 @@ function App() {
     commitHistory,
     undo,
     redo,
+    canUndo,
+    canRedo,
   } = editorStore;
   const [signatureDataUrl, setSignatureDataUrl] = useState(() => {
     try { return localStorage.getItem('milpdf.signature') || null; } catch { return null; }
@@ -1103,6 +1105,11 @@ const runDD214Analysis = useCallback(async () => {
     deleteObject(id);
   }, [objects, layers, deleteObject]);
 
+  const handleDeleteSelected = useCallback(() => {
+    selectionIds.forEach(id => handleDeleteObject(id));
+    setSelection([]);
+  }, [selectionIds, handleDeleteObject, setSelection]);
+
   const handleUpdateObject = useCallback((id, updates) => {
     updateObject(id, updates);
     if (updates?.timestamp) pushToast({ type: 'info', title: 'Timeline Updated' });
@@ -1842,7 +1849,13 @@ const runDD214Analysis = useCallback(async () => {
           return Math.min(numPages, p + 1);
         });
       }
-      else if (e.key === 'Delete' && !inInput && renderDoc) { handleDeletePage(); }
+      else if (e.key === 'Delete' && !inInput && renderDoc) {
+        if (selectionIds.length > 0) {
+          handleDeleteSelected();
+        } else {
+          handleDeletePage();
+        }
+      }
 
       if (!inInput && activeTool === 'select' && selectionIds.length > 0 &&
           ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
@@ -1861,7 +1874,7 @@ const runDD214Analysis = useCallback(async () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [renderDoc, activeTool, selectionIds, selectedObjects, numPages, handleDeletePage,
-    handleBatchUpdateObjects, runCommand, shortcutMap, redo]);
+    handleDeleteSelected, handleBatchUpdateObjects, runCommand, shortcutMap, redo]);
 
   const assistantSuggestedActions = useMemo(
     () => buildAssistantActionCatalog({ currentPage, hasDocument: !!renderDoc }),
@@ -2327,6 +2340,13 @@ const runDD214Analysis = useCallback(async () => {
         onDropFile={loadFile}
         onImagePlaced={handleImagePlaced}
         onImagePlacementCancel={handleImagePlacementCancel}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undo}
+        onRedo={redo}
+        onDeleteSelected={handleDeleteSelected}
+        onCopy={handleCopy}
+        onPaste={handlePaste}
         onAskAva={handleAskAva}
         onRunSuggestedAction={handleSuggestedAssistantAction}
         assistantDockProps={{
