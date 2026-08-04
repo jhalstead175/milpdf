@@ -188,7 +188,7 @@ function buildAssistantActionCatalog({ currentPage, hasDocument }) {
 function App() {
   const [view, setView] = useState('landing');
   const [toasts, setToasts] = useState([]);
-  const [pdfjsReady, setPdfjsReady] = useState(false);
+  const [pdfjsReady, setPdfjsReady] = useState(true);
   const {
     workspace,
     setWorkspace,
@@ -349,6 +349,7 @@ function App() {
   const jsonInputRef = useRef(null);
   const wheelAccumulatorRef = useRef(0);
   const wheelResetTimeoutRef = useRef(null);
+  const pendingFileFetchedRef = useRef(false);
   const [recentFiles, setRecentFiles] = useState([]);
   const [insertPosition, setInsertPosition] = useState('after');
   const [imagePlacementQueue, setImagePlacementQueue] = useState([]);
@@ -1066,17 +1067,22 @@ const runDD214Analysis = useCallback(async () => {
     window.electronAPI.onOpenImages(decodeImages);
 
     // Pull any file pending at startup (handles timing race where did-finish-load
-    // fires before React registers its onOpenFile listener)
-    window.electronAPI.getPendingFile().then(async (pending) => {
-      if (!pending) return;
-      if (pending.type === 'pdf') {
-        const bytes = Uint8Array.from(atob(pending.data), c => c.charCodeAt(0));
-        await loadFromBuffer(bytes.buffer, pending.name);
-        setRecentFiles(await window.electronAPI.getRecentFiles());
-      } else if (pending.type === 'images') {
-        await decodeImages(pending.images);
-      }
-    });
+    // fires before React registers its onOpenFile listener).
+    // Guard with a ref so getPendingFile() is only called once — the main process
+    // clears the value on the first call, and this effect can re-run if deps change.
+    if (!pendingFileFetchedRef.current) {
+      pendingFileFetchedRef.current = true;
+      window.electronAPI.getPendingFile().then(async (pending) => {
+        if (!pending) return;
+        if (pending.type === 'pdf') {
+          const bytes = Uint8Array.from(atob(pending.data), c => c.charCodeAt(0));
+          await loadFromBuffer(bytes.buffer, pending.name);
+          setRecentFiles(await window.electronAPI.getRecentFiles());
+        } else if (pending.type === 'images') {
+          await decodeImages(pending.images);
+        }
+      });
+    }
 
     // Load initial recent files list
     window.electronAPI.getRecentFiles().then(setRecentFiles);
