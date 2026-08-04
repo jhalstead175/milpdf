@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
   Crop, Image as ImageIcon, Stamp, Undo2, RotateCw, Trash2, FileMinus,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -119,6 +120,27 @@ export default function ReviewWorkspace({
   const handleCanvasContextMenu = useCallback((e) => {
     setCtxMenu({ x: e.clientX, y: e.clientY });
   }, []);
+
+  // Page navigation input state
+  const [pageInputValue, setPageInputValue] = useState(String(currentPage || 1));
+  useEffect(() => {
+    setPageInputValue(String(currentPage || 1));
+  }, [currentPage]);
+  const handlePageInputChange = useCallback((e) => {
+    setPageInputValue(e.target.value);
+  }, []);
+  const handlePageInputBlur = useCallback(() => {
+    const n = parseInt(pageInputValue, 10);
+    if (!isNaN(n) && n >= 1 && n <= numPages) {
+      onJumpToPage(n);
+    } else {
+      setPageInputValue(String(currentPage || 1));
+    }
+  }, [pageInputValue, numPages, currentPage, onJumpToPage]);
+  const handlePageInputKeyDown = useCallback((e) => {
+    if (e.key === 'Enter') { e.target.blur(); }
+    else if (e.key === 'Escape') { setPageInputValue(String(currentPage || 1)); e.target.blur(); }
+  }, [currentPage]);
 
   const ctxMenuItems = [
     { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !canUndo, onClick: onUndo },
@@ -467,9 +489,56 @@ export default function ReviewWorkspace({
                   </button>
                 </div>
                 <div className="canvas-page-pill">
-                  <button onClick={() => onJumpToPage(Math.max(1, currentPage - 1))} disabled={currentPage <= 1}>&lt;</button>
-                  <span>{currentPage} / {numPages}</span>
-                  <button onClick={() => onJumpToPage(Math.min(numPages, currentPage + 1))} disabled={currentPage >= numPages}>&gt;</button>
+                  <button
+                    className="canvas-page-nav-btn"
+                    onClick={() => onJumpToPage(1)}
+                    disabled={currentPage <= 1}
+                    title="First page"
+                    aria-label="First page"
+                  >
+                    <ChevronsLeft size={13} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    className="canvas-page-nav-btn"
+                    onClick={() => onJumpToPage(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                    title="Previous page"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={13} strokeWidth={2.2} />
+                  </button>
+                  <span className="canvas-page-input-wrap">
+                    <input
+                      className="canvas-page-input"
+                      type="text"
+                      inputMode="numeric"
+                      value={pageInputValue}
+                      onChange={handlePageInputChange}
+                      onBlur={handlePageInputBlur}
+                      onKeyDown={handlePageInputKeyDown}
+                      aria-label="Page number"
+                    />
+                    <span className="canvas-page-sep">/</span>
+                    <span className="canvas-page-total">{numPages}</span>
+                  </span>
+                  <button
+                    className="canvas-page-nav-btn"
+                    onClick={() => onJumpToPage(currentPage + 1)}
+                    disabled={currentPage >= numPages}
+                    title="Next page"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={13} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    className="canvas-page-nav-btn"
+                    onClick={() => onJumpToPage(numPages)}
+                    disabled={currentPage >= numPages}
+                    title="Last page"
+                    aria-label="Last page"
+                  >
+                    <ChevronsRight size={13} strokeWidth={2.2} />
+                  </button>
                 </div>
               </>
             ) : null}
