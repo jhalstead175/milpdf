@@ -662,27 +662,89 @@ html.editor-active #root {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 2px;
+  padding: 4px 6px;
   border: 1px solid rgba(79, 97, 117, 0.14);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
   color: var(--app-text);
   z-index: 20;
+  white-space: nowrap;
 }
 
-.canvas-page-pill button {
-  width: 24px;
-  height: 24px;
+.canvas-page-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border: none;
   border-radius: 999px;
-  background: var(--app-accent-soft);
-  color: var(--app-text);
+  background: transparent;
+  color: var(--app-text-dim);
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 
-.canvas-page-pill button:disabled,
+.canvas-page-nav-btn:hover {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.canvas-page-nav-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.canvas-page-nav-btn:disabled:hover {
+  background: transparent;
+  color: var(--app-text-dim);
+}
+
+.canvas-page-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.canvas-page-input {
+  width: 36px;
+  text-align: center;
+  border: 1px solid var(--app-border-hard);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 2px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.canvas-page-input:focus {
+  border-color: var(--app-accent);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.canvas-page-sep {
+  font-size: 12px;
+  color: var(--app-text-faint);
+  user-select: none;
+}
+
+.canvas-page-total {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 14px;
+  user-select: none;
+}
+
+.canvas-page-nav-btn:disabled,
 .canvas-zoom-pill button:disabled,
 .acrobat-zoom-controls button:disabled {
   opacity: 0.35;
