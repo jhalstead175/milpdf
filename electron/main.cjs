@@ -8,6 +8,9 @@ const MAX_RECENT = 10;
 
 // Keep a global reference so the window isn't garbage-collected
 let mainWindow = null;
+// fileToOpen: only used for macOS open-file event fired before the window exists.
+// For Windows/Linux startup the file is read synchronously before createWindow() so
+// there is no renderer timing race with did-finish-load.
 let fileToOpen = null;
 // File data prepared for the renderer to pull on mount (avoids IPC timing race)
 let pendingFileInfo = null;
@@ -63,25 +66,18 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Prepare any file passed at startup as pendingFileInfo so the renderer
-  // can pull it via get-pending-file once React has mounted (avoids the race
-  // where did-finish-load fires before the onOpenFile listener is registered).
+  // macOS only: open-file can fire before the window exists, setting fileToOpen.
+  // Read it on did-finish-load so pendingFileInfo is ready before React mounts.
+  // Windows/Linux startup files are read synchronously in app.whenReady (below).
   mainWindow.webContents.on('did-finish-load', () => {
     if (!fileToOpen) return;
     const ext = path.extname(fileToOpen).toLowerCase();
     try {
       if (IMAGE_EXTS.includes(ext)) {
-        const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
-        const imagePaths = args.filter(arg => {
-          const e = path.extname(arg).toLowerCase();
-          return IMAGE_EXTS.includes(e) && fs.existsSync(arg);
-        });
-        const filePaths = imagePaths.length > 0 ? imagePaths : [fileToOpen];
-        const images = filePaths.map(fp => ({
-          name: path.basename(fp),
-          data: fs.readFileSync(fp).toString('base64'),
-        }));
-        pendingFileInfo = { type: 'images', images };
+        pendingFileInfo = { type: 'images', images: [{
+          name: path.basename(fileToOpen),
+          data: fs.readFileSync(fileToOpen).toString('base64'),
+        }] };
       } else {
         const buffer = fs.readFileSync(fileToOpen);
         const name = path.basename(fileToOpen);
@@ -89,7 +85,7 @@ function createWindow() {
         addToRecentFiles(name, fileToOpen);
       }
     } catch (err) {
-      console.error('Failed to prepare pending file:', err);
+      console.error('Failed to prepare pending file (macOS open-file):', err);
     }
     fileToOpen = null;
   });
@@ -171,7 +167,37 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    fileToOpen = getFileFromArgs(process.argv);
+    // Read any startup file synchronously *before* creating the window so that
+    // pendingFileInfo is already populated when the renderer calls get-pending-file.
+    // This avoids the timing race where React's useEffect fires before did-finish-load.
+    const startupFile = getFileFromArgs(process.argv);
+    if (startupFile) {
+      try {
+        const ext = path.extname(startupFile).toLowerCase();
+        if (IMAGE_EXTS.includes(ext)) {
+          const args = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
+          const imagePaths = args.filter(arg => {
+            const e = path.extname(arg).toLowerCase();
+            return IMAGE_EXTS.includes(e) && fs.existsSync(arg);
+          });
+          const filePaths = imagePaths.length > 0 ? imagePaths : [startupFile];
+          pendingFileInfo = {
+            type: 'images',
+            images: filePaths.map(fp => ({
+              name: path.basename(fp),
+              data: fs.readFileSync(fp).toString('base64'),
+            })),
+          };
+        } else {
+          const buffer = fs.readFileSync(startupFile);
+          const name = path.basename(startupFile);
+          pendingFileInfo = { type: 'pdf', name, data: buffer.toString('base64') };
+          addToRecentFiles(name, startupFile);
+        }
+      } catch (err) {
+        console.error('Failed to read startup file:', err);
+      }
+    }
     createWindow();
   });
 }

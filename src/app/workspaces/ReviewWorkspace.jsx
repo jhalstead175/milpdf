@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   MousePointer2, Highlighter, Pencil, Type, PenTool, Eraser, ShieldOff, SquarePen,
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
-  Crop, Image as ImageIcon, Stamp, Undo2, RotateCw, Trash2,
+  Crop, Image as ImageIcon, Stamp, Undo2, RotateCw, Trash2, FileMinus,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -129,6 +129,8 @@ export default function ReviewWorkspace({
     { label: 'Delete', shortcut: 'Del', disabled: selectionIds.length === 0, onClick: onDeleteSelected },
     { type: 'divider' },
     { label: 'Deselect All', disabled: selectionIds.length === 0, onClick: () => onSetSelection([]) },
+    { type: 'divider' },
+    { label: 'Delete Page', shortcut: 'Del', disabled: !renderDoc || numPages <= 1, onClick: () => onDeletePageAt(currentPage) },
   ];
 
   const pageIssueCount = pageAnnotations.length + reviewFindings.length;
@@ -386,7 +388,18 @@ export default function ReviewWorkspace({
                 >
                   <Trash2 size={16} strokeWidth={1.9} />
                 </button>
-              ) : null}
+              ) : (
+                <button
+                  type="button"
+                  className="tool-rail-button tool-rail-danger"
+                  onClick={() => onDeletePageAt(currentPage)}
+                  disabled={!renderDoc || numPages <= 1}
+                  title={`Delete page ${currentPage}`}
+                  aria-label="Delete current page"
+                >
+                  <FileMinus size={16} strokeWidth={1.9} />
+                </button>
+              )}
               <button
                 type="button"
                 className="tool-rail-button tool-rail-collapse"
