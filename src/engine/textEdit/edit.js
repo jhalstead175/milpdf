@@ -74,7 +74,8 @@ export async function applyTextEdit(pdfBytes, pageNumber, run, newText) {
     newContent = replaceRunText(content, run, newText);
   }
 
-  const stream = doc.context.stream(toLatin1Bytes(newContent));
+  // pdf-lib PDFContext.stream(entries, contents) — entries dict first, bytes second.
+  const stream = doc.context.stream({}, toLatin1Bytes(newContent));
   page.node.set(PDFName.of('Contents'), doc.context.register(stream));
   return doc.save();
 }

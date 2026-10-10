@@ -3063,6 +3063,11 @@ html.editor-active #root {
   cursor: pointer;
 }
 .tfb-select:focus { outline: none; border-color: var(--app-accent); }
+/* Options fall back to OS-native rendering (white bg on Windows); force dark text */
+.tfb-select option {
+  background: #1e293b;
+  color: #e2e8f0;
+}
 
 .tfb-size {
   background: var(--app-surface-panel-strong);
@@ -3292,7 +3297,7 @@ html.editor-active #root {
   padding: 8px 18px;
   border: 1px solid var(--app-border-hard);
   border-radius: 6px;
-  background: var(--app-surface-2);
+  background: #ffffff;
   color: var(--app-text);
   font-size: 13px;
   cursor: pointer;
@@ -3300,7 +3305,7 @@ html.editor-active #root {
 }
 
 .btn-secondary:hover {
-  background: var(--app-surface-2);
+  background: #f1f5f9;
   border-color: var(--app-accent-border-strong);
   color: var(--app-text);
 }
@@ -3334,8 +3339,8 @@ html.editor-active #root {
 
 .btn-secondary.active {
   border-color: var(--app-accent-border-strong);
-  background: linear-gradient(180deg, rgba(79, 97, 117, 0.18) 0%, rgba(79, 97, 117, 0.1) 100%);
-  color: var(--app-on-accent);
+  background: var(--app-accent);
+  color: #ffffff;
   box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.12);
 }
 
@@ -3998,22 +4003,7 @@ html.editor-active #root {
   border-radius: 2px;
 }
 
-.resize-handle {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #fff;
-  border: 2px solid var(--app-accent);
-  border-radius: 2px;
-  box-sizing: border-box;
-  cursor: nwse-resize;
-  z-index: 100;
-}
-
-.resize-handle-tl { cursor: nwse-resize; }
-.resize-handle-tr { cursor: nesw-resize; }
-.resize-handle-bl { cursor: nesw-resize; }
-.resize-handle-br { cursor: nwse-resize; }
+/* handle-* direction cursors defined above near line 3575 take precedence */
 
 /* ===== Tool-specific overlay preview styles ===== */
 .highlight-overlay {

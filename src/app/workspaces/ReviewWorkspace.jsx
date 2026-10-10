@@ -4,6 +4,7 @@ import {
   PanelRightOpen, PanelLeftOpen, PanelLeftClose, ZoomIn, ZoomOut,
   Crop, Image as ImageIcon, Stamp, Undo2, RotateCw, Trash2, FileMinus,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  FilePlus, FileStack,
 } from 'lucide-react';
 import LayersPanel from '../../components/LayersPanel';
 import InspectorPanel from '../../components/InspectorPanel';
@@ -40,6 +41,11 @@ const TOOL_GROUPS = [
     { id: 'crop', icon: Crop, label: 'Crop Page' },
     { id: 'redact', icon: ShieldOff, label: 'Redact' },
     { id: 'eraser', icon: Eraser, label: 'Whiteout' },
+  ],
+  [
+    { id: 'rotate-page', icon: RotateCw, label: 'Rotate Page 90°', action: 'rotatePage' },
+    { id: 'add-blank', icon: FilePlus, label: 'Add Blank Page', action: 'addBlank' },
+    { id: 'merge-pdf', icon: FileStack, label: 'Merge PDF', action: 'merge' },
   ],
 ];
 
@@ -84,6 +90,9 @@ export default function ReviewWorkspace({
   onHandleOpen,
   onImportImages,
   onOpenStamp,
+  onRotatePage,
+  onAddBlankPage,
+  onMergePdf,
   onHandleToolChange,
   onHandleToolDefaultChange,
   onSetSelection,
@@ -210,6 +219,14 @@ export default function ReviewWorkspace({
                       value={value}
                       onChange={(e) => onHandleToolDefaultChange(activeToolConfig.key, field.key, e.target.value)}
                     />
+                  ) : field.type === 'select' ? (
+                    <select
+                      value={value}
+                      onChange={(e) => onHandleToolDefaultChange(activeToolConfig.key, field.key, e.target.value)}
+                      style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid var(--app-border-hard)', background: '#fff', color: 'var(--app-text)', cursor: 'pointer', maxWidth: 120 }}
+                    >
+                      {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
                   ) : (
                     <>
                       <input
@@ -355,13 +372,19 @@ export default function ReviewWorkspace({
                   {groupIndex > 0 ? <div className="tool-rail-divider" /> : null}
                   {group.map((item) => {
                     const mappedTool = TOOL_ALIAS[item.id] || item.id;
-                    const isActive = activeTool === mappedTool;
+                    const isActive = !item.action && activeTool === mappedTool;
                     const Icon = item.icon;
                     const handleClick = item.action === 'import'
                       ? () => onImportImages?.()
                       : item.action === 'stamp'
                         ? () => onOpenStamp?.()
-                        : () => onHandleToolChange(mappedTool);
+                        : item.action === 'rotatePage'
+                          ? () => onRotatePage?.()
+                          : item.action === 'addBlank'
+                            ? () => onAddBlankPage?.()
+                            : item.action === 'merge'
+                              ? () => onMergePdf?.()
+                              : () => onHandleToolChange(mappedTool);
 
                     return (
                       <button
