@@ -1096,6 +1096,7 @@ export default function PDFViewer({
               <div
                 className="tef-bar"
                 onMouseDown={e => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
                 style={{
                   position: 'absolute',
                   left: textEditTarget.left,
@@ -1155,6 +1156,7 @@ export default function PDFViewer({
                 ref={textEditInputRef}
                 className="text-edit-inline"
                 autoFocus
+                onClick={e => e.stopPropagation()}
                 title={textEditTarget.editable ? 'Edit text — Enter to apply, Esc to cancel' : 'Editing switches this text to a standard font'}
                 value={textEditTarget.value}
                 onChange={(e) => setTextEditTarget((t) => (t ? { ...t, value: e.target.value } : t))}
