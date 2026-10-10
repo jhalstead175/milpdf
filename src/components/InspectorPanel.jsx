@@ -138,6 +138,17 @@ export default function InspectorPanel({
                 onChange={(e) => update({ text: e.target.value })}
               />
             </div>
+            <div className="field">
+              <label>Font Family</label>
+              <select
+                value={obj.fontFamily || 'Helvetica'}
+                onChange={(e) => update({ fontFamily: e.target.value })}
+              >
+                {['Arial', 'Calibri', 'Courier New', 'Georgia', 'Helvetica', 'Times New Roman', 'Verdana'].map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
             <div className="field-row">
               <div className="field">
                 <label>Font Size</label>

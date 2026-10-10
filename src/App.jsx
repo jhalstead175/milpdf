@@ -1418,14 +1418,18 @@ const runDD214Analysis = useCallback(async () => {
   }, [objects, selectionIds, handleBatchUpdateObjects]);
 
   const handleToolChange = useCallback((tool) => {
-    // Always open the signature manager (to reuse, replace, upload, or remove
-    // the saved signature) rather than silently jumping to placement.
     if (tool === 'signature') {
-      setShowSignaturePad(true);
+      if (signatureDataUrl) {
+        // Signature already saved — go straight to placement.
+        setActiveTool('signature');
+      } else {
+        // No signature yet — open the draw/upload manager.
+        setShowSignaturePad(true);
+      }
       return;
     }
     setActiveTool(tool);
-  }, [setActiveTool]);
+  }, [setActiveTool, signatureDataUrl]);
 
   const handleUseSavedSignature = useCallback(() => {
     setShowSignaturePad(false);
