@@ -3223,12 +3223,12 @@ html.editor-active #root {
 }
 
 .modal {
-  background: var(--app-surface-2);
+  background: #ffffff;
   border: 1px solid var(--app-border-hard);
   border-radius: 12px;
   padding: 24px;
   max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--app-accent-muted);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0,0,0,0.08);
 }
 
 .modal h3 {
@@ -4491,7 +4491,7 @@ html.editor-active #root {
 .ocr-progress-bar {
   height: 8px;
   border-radius: 999px;
-  background: var(--app-surface-2);
+  background: #e2e8f0;
   overflow: hidden;
   margin-bottom: 10px;
 }
@@ -4582,7 +4582,7 @@ html.editor-active #root {
   font-size: 13px;
   background: transparent;
   border: none;
-  color: var(--app-text-faint);
+  color: var(--app-text-dim);
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
