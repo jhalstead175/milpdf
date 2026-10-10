@@ -146,6 +146,10 @@ export default function PDFViewer({
   const imageStartRef = useRef(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const [textEditTarget, setTextEditTarget] = useState(null);
+  const textEditTargetRef = useRef(null);
+  textEditTargetRef.current = textEditTarget;
+
+  const [textEditMessage, setTextEditMessage] = useState(null); // brief "no text here" feedback
 
   const [textBoxRect, setTextBoxRect] = useState(null);
   const [textBoxStart, setTextBoxStart] = useState(null);
@@ -541,7 +545,13 @@ export default function PDFViewer({
       return;
     }
     const run = locateTextRunAtPoint(runs, point);
-    if (!run) { setTextEditTarget(null); return; }
+    if (!run) {
+      setTextEditTarget(null);
+      setTextEditMessage({ x: pos.x, y: pos.y, text: 'No editable text at this point' });
+      setTimeout(() => setTextEditMessage(null), 2000);
+      return;
+    }
+    setTextEditMessage(null);
     const box = estimateRunBox(run);
     const screen = pdfRectToScreen(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
     const initial = run.displayText ?? run.text;
@@ -558,12 +568,15 @@ export default function PDFViewer({
     });
   }, [pdfBytes, onTextEdit, currentPage, screenToPdfPoint, pdfRectToScreen, zoom]);
 
+  // Use a ref so commitTextEdit always reads the latest textEditTarget value
+  // without needing textEditTarget in its deps (avoids stale closure on fast blur).
   const commitTextEdit = useCallback(() => {
-    if (!textEditTarget) return;
-    const { run, value, original } = textEditTarget;
-    if (value !== original && value.trim() !== '') onTextEdit(currentPage, run, value);
+    const target = textEditTargetRef.current;
+    if (!target) return;
+    const { run, value, original } = target;
+    if (value !== original) onTextEdit(currentPage, run, value);
     setTextEditTarget(null);
-  }, [textEditTarget, onTextEdit, currentPage]);
+  }, [onTextEdit, currentPage]);
 
   const handleCanvasClick = useCallback((e) => {
     if (!canvasRef.current) return;
@@ -1119,6 +1132,28 @@ export default function PDFViewer({
                 </div>
               )}
             </>
+          )}
+
+          {textEditMessage && (
+            <div
+              style={{
+                position: 'absolute',
+                left: Math.min(textEditMessage.x + 8, (canvasRef.current?.offsetWidth ?? 400) - 260),
+                top: Math.max(textEditMessage.y - 32, 4),
+                fontSize: 12,
+                color: '#1e293b',
+                background: '#fff3cd',
+                border: '1px solid #ffc107',
+                borderRadius: 4,
+                padding: '3px 8px',
+                pointerEvents: 'none',
+                zIndex: 70,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              }}
+            >
+              {textEditMessage.text}
+            </div>
           )}
 
           {activeTool === 'edit' && !editInput && contentBlocks.map((block, i) => (
