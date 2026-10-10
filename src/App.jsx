@@ -915,11 +915,11 @@ const runDD214Analysis = useCallback(async () => {
 
   // In-place text edit: rewrite the base PDF text, then refresh the render
   // from the new bytes while preserving annotations (objects) and page ids.
-  const handleTextEdit = useCallback(async (pageNumber, run, newText) => {
+  const handleTextEdit = useCallback(async (pageNumber, run, newText, fmt = {}) => {
     if (!pdfBytes) return;
     setLoading(true);
     try {
-      const newBytes = await applyTextEdit(pdfBytes, pageNumber, run, newText);
+      const newBytes = await applyTextEdit(pdfBytes, pageNumber, run, newText, fmt);
       const result = await loadPdf(newBytes);
       updateFromResult(result, { pageIds: pageMeta.map((meta) => meta.id) });
       pushToast({ type: 'success', title: 'Text Updated', message: 'Edited the PDF text in place.' });

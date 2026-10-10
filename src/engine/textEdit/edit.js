@@ -1,24 +1,44 @@
 // Apply an in-place text edit and write the page's content stream back.
 //
-// Two strategies:
-//  - Editable run (simple ASCII/WinAnsi font): replace the string operand in
-//    place, keeping the original font (perfect fidelity). Phase 3.
-//  - Non-editable run (Type0/CID, subset, etc.): SUBSTITUTE a standard font for
-//    just that run — wrap the show op with `/Subst size Tf ... Tj /Orig size Tf`
-//    so following text keeps the original font. The edited run renders in
-//    Helvetica (typeface changes), but it renders correctly and is searchable.
-//    Phase 4b/2.
+// Three strategies:
+//  - Plain edit (editable run, no format changes): replace the string operand
+//    in place, keeping the original font (perfect fidelity).
+//  - Formatted edit (editable run + fmt options): wrap the show op with new
+//    color/font/size operators and restore originals after the run.
+//  - Non-editable run (Type0/CID, subset, etc.): substitute a standard font
+//    for just that run, applying any fmt options, and restore after.
 
 import { PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
 import { getPageContent } from './pageText';
 
 const SUBST_FONT_NAME = 'MilPDFEdit';
 
+const STANDARD_FONT_MAP = {
+  'Arial':           StandardFonts.Helvetica,
+  'Calibri':         StandardFonts.Helvetica,
+  'Helvetica':       StandardFonts.Helvetica,
+  'Verdana':         StandardFonts.Helvetica,
+  'Courier New':     StandardFonts.Courier,
+  'Courier':         StandardFonts.Courier,
+  'Georgia':         StandardFonts.TimesRoman,
+  'Times New Roman': StandardFonts.TimesRoman,
+  'Times':           StandardFonts.TimesRoman,
+};
+
 const toLatin1Bytes = (str) => {
   const out = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
   return out;
 };
+
+function hexToRgb(hex) {
+  const h = (hex || '#000000').replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16) / 255,
+    g: parseInt(h.slice(2, 4), 16) / 255,
+    b: parseInt(h.slice(4, 6), 16) / 255,
+  };
+}
 
 // Encode text as a PDF hex-string operand: <48656C...> (WinAnsi byte codes).
 export function encodeHexString(text) {
@@ -35,8 +55,8 @@ export function replaceRunText(content, run, newText) {
   return content.slice(0, run.strByteStart) + encodeHexString(newText) + content.slice(run.strByteEnd);
 }
 
-async function registerSubstituteFont(doc, page) {
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+async function registerFont(doc, page, stdFont, name) {
+  const font = await doc.embedFont(stdFont);
   let resources = doc.context.lookup(page.node.get(PDFName.of('Resources')));
   if (!resources && typeof page.node.Resources === 'function') {
     resources = doc.context.lookup(page.node.Resources());
@@ -50,25 +70,61 @@ async function registerSubstituteFont(doc, page) {
     fontRes = doc.context.obj({});
     resources.set(PDFName.of('Font'), doc.context.register(fontRes));
   }
-  fontRes.set(PDFName.of(SUBST_FONT_NAME), font.ref);
-  return SUBST_FONT_NAME;
+  fontRes.set(PDFName.of(name), font.ref);
+  return name;
 }
 
-export async function applyTextEdit(pdfBytes, pageNumber, run, newText) {
+async function registerSubstituteFont(doc, page) {
+  return registerFont(doc, page, StandardFonts.Helvetica, SUBST_FONT_NAME);
+}
+
+async function registerNamedFont(doc, page, fontFamily) {
+  const stdFont = STANDARD_FONT_MAP[fontFamily] || StandardFonts.Helvetica;
+  const name = 'MilEd_' + fontFamily.replace(/\s+/g, '_');
+  return registerFont(doc, page, stdFont, name);
+}
+
+// Build the operator sequence for a formatted run:
+//   [color rg]  /fontRef size Tf  <text> Tj  /origFont origSize Tf  [restore-color]
+function buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, color) {
+  let seq = '';
+  if (color) {
+    const { r, g, b } = hexToRgb(color);
+    seq += `${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)} rg `;
+  }
+  seq += `/${fontRef} ${size} Tf ${encodeHexString(newText)} Tj /${origFontRef} ${origSize} Tf`;
+  if (color) seq += ' 0 0 0 rg';
+  return seq;
+}
+
+export async function applyTextEdit(pdfBytes, pageNumber, run, newText, fmt = {}) {
   const content = await getPageContent(pdfBytes, pageNumber);
   const doc = await PDFDocument.load(pdfBytes);
   const page = doc.getPages()[pageNumber - 1];
   if (!page) throw new Error(`Page ${pageNumber} not found`);
 
+  const origSize = run.fontSize || 12;
+  const origFontRef = run.fontRef;
+  const hasFormatting = fmt.fontFamily || fmt.fontSize || fmt.color;
+
   let newContent;
-  if (run.editable === false) {
-    // Substitute a standard font for this run, restoring the original after.
+
+  if (run.editable === false || hasFormatting) {
     if (run.opByteStart == null || run.opByteEnd == null) {
       throw new Error('This text run cannot be edited in place.');
     }
-    const subst = await registerSubstituteFont(doc, page);
-    const size = run.fontSize || 12;
-    const seq = `/${subst} ${size} Tf ${encodeHexString(newText)} Tj /${run.fontRef} ${size} Tf`;
+
+    let fontRef;
+    if (fmt.fontFamily) {
+      fontRef = await registerNamedFont(doc, page, fmt.fontFamily);
+    } else if (run.editable === false) {
+      fontRef = await registerSubstituteFont(doc, page);
+    } else {
+      fontRef = origFontRef;
+    }
+
+    const size = fmt.fontSize || origSize;
+    const seq = buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, fmt.color || null);
     newContent = content.slice(0, run.opByteStart) + seq + content.slice(run.opByteEnd);
   } else {
     newContent = replaceRunText(content, run, newText);
