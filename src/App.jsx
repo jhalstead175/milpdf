@@ -1574,6 +1574,7 @@ const runDD214Analysis = useCallback(async () => {
         fields: [
           { key: 'color', label: 'Color', type: 'color' },
           { key: 'fontSize', label: 'Size', type: 'range', min: 10, max: 48, step: 1 },
+          { key: 'fontFamily', label: 'Font', type: 'select', options: ['Arial', 'Calibri', 'Courier New', 'Georgia', 'Helvetica', 'Times New Roman', 'Verdana'] },
         ],
       };
     }
@@ -2326,6 +2327,9 @@ const runDD214Analysis = useCallback(async () => {
         onHandleOpen={handleOpen}
         onImportImages={handleImportImages}
         onOpenStamp={() => setShowStampDialog(true)}
+        onRotatePage={() => handleRotate(90)}
+        onAddBlankPage={handleAddBlank}
+        onMergePdf={handleMerge}
         onHandleToolChange={handleToolChange}
         onHandleToolDefaultChange={handleToolDefaultChange}
         onSetSelection={setSelection}
