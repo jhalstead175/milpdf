@@ -148,6 +148,7 @@ export default function PDFViewer({
   const [textEditTarget, setTextEditTarget] = useState(null);
   const textEditTargetRef = useRef(null);
   textEditTargetRef.current = textEditTarget;
+  const textEditInputRef = useRef(null);
 
   const [textEditMessage, setTextEditMessage] = useState(null); // brief "no text here" feedback
 
@@ -560,6 +561,7 @@ export default function PDFViewer({
       value: initial,
       original: initial,
       editable: run.editable !== false,
+      fmt: { fontFamily: '', fontSize: '', color: '' },
       left: screen.left,
       top: screen.top,
       width: Math.max(screen.width, 60),
@@ -573,8 +575,16 @@ export default function PDFViewer({
   const commitTextEdit = useCallback(() => {
     const target = textEditTargetRef.current;
     if (!target) return;
-    const { run, value, original } = target;
-    if (value !== original) onTextEdit(currentPage, run, value);
+    const { run, value, original, fmt } = target;
+    const fmtChanged = fmt.fontFamily || fmt.fontSize || fmt.color;
+    if (value !== original || fmtChanged) {
+      const cleanFmt = {
+        fontFamily: fmt.fontFamily || undefined,
+        fontSize:   fmt.fontSize   ? Number(fmt.fontSize) : undefined,
+        color:      fmt.color      || undefined,
+      };
+      onTextEdit(currentPage, run, value, cleanFmt);
+    }
     setTextEditTarget(null);
   }, [onTextEdit, currentPage]);
 
@@ -1082,7 +1092,67 @@ export default function PDFViewer({
 
           {textEditTarget && (
             <>
+              {/* Format bar — appears above the inline input */}
+              <div
+                className="tef-bar"
+                onMouseDown={e => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  left: textEditTarget.left,
+                  top: Math.max(textEditTarget.top - 36, 2),
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: 5,
+                  padding: '3px 6px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                  zIndex: 65,
+                  pointerEvents: 'auto',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <select
+                  value={textEditTarget.fmt.fontFamily}
+                  onChange={e => {
+                    setTextEditTarget(t => t ? { ...t, fmt: { ...t.fmt, fontFamily: e.target.value } } : t);
+                    setTimeout(() => textEditInputRef.current?.focus(), 0);
+                  }}
+                  style={{ fontSize: 11, padding: '1px 3px', borderRadius: 3, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', maxWidth: 120 }}
+                >
+                  <option value="">Font (keep)</option>
+                  {['Arial','Calibri','Courier New','Georgia','Helvetica','Times New Roman','Verdana'].map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="6" max="144"
+                  placeholder={String(Math.round(textEditTarget.run.fontSize || 12))}
+                  value={textEditTarget.fmt.fontSize}
+                  onChange={e => setTextEditTarget(t => t ? { ...t, fmt: { ...t.fmt, fontSize: e.target.value } } : t)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
+                  }}
+                  onBlur={() => setTimeout(() => textEditInputRef.current?.focus(), 0)}
+                  style={{ width: 44, fontSize: 11, padding: '1px 3px', borderRadius: 3, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0' }}
+                />
+                <input
+                  type="color"
+                  value={textEditTarget.fmt.color || '#000000'}
+                  onChange={e => {
+                    setTextEditTarget(t => t ? { ...t, fmt: { ...t.fmt, color: e.target.value } } : t);
+                    setTimeout(() => textEditInputRef.current?.focus(), 0);
+                  }}
+                  style={{ width: 24, height: 22, padding: 1, borderRadius: 3, border: '1px solid #475569', background: 'none', cursor: 'pointer' }}
+                  title="Text color"
+                />
+                <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 2 }}>Enter to apply</span>
+              </div>
               <input
+                ref={textEditInputRef}
                 className="text-edit-inline"
                 autoFocus
                 title={textEditTarget.editable ? 'Edit text — Enter to apply, Esc to cancel' : 'Editing switches this text to a standard font'}
@@ -1092,7 +1162,11 @@ export default function PDFViewer({
                   if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
                   else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
                 }}
-                onBlur={commitTextEdit}
+                onBlur={(e) => {
+                  // Don't commit when focus moves to the format bar controls
+                  if (e.relatedTarget?.closest?.('.tef-bar')) return;
+                  commitTextEdit();
+                }}
                 style={{
                   position: 'absolute',
                   left: textEditTarget.left,
