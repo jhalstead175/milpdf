@@ -40,6 +40,7 @@ export function extractTextRuns(content) {
   let fontRef = null;
   let fontSize = 0;
   let leading = 0;
+  let fillColor = [0, 0, 0]; // tracks current non-stroking color (rg/g/k)
   let operands = [];
 
   const num = (k) => (operands[k]?.type === 'number' ? operands[k].value : 0);
@@ -58,6 +59,17 @@ export function extractTextRuns(content) {
       case 'cm': ctm = mul({ a: num(0), b: num(1), c: num(2), d: num(3), e: num(4), f: num(5) }, ctm); break;
       case 'BT': tm = ident(); lm = ident(); break;
       case 'Tf': fontRef = operands[0]?.value ?? fontRef; fontSize = num(1); break;
+      // non-stroking color operators — track so edits can restore the prior color
+      case 'rg': fillColor = [num(0), num(1), num(2)]; break;
+      case 'g':  fillColor = [num(0), num(0), num(0)]; break; // gray → RGB
+      case 'k': { // CMYK → approximate RGB
+        const c = num(0), m = num(1), y = num(2), k = num(3);
+        fillColor = [(1-c)*(1-k), (1-m)*(1-k), (1-y)*(1-k)];
+        break;
+      }
+      case 'sc': case 'scn': // device-space or pattern color — record as-is if 3 nums
+        if (operands.length >= 3) fillColor = [num(0), num(1), num(2)];
+        break;
       case 'TL': leading = num(0); break;
       case 'Td': lm = mul(translate(num(0), num(1)), lm); tm = { ...lm }; break;
       case 'TD': leading = -num(1); lm = mul(translate(num(0), num(1)), lm); tm = { ...lm }; break;
@@ -70,7 +82,7 @@ export function extractTextRuns(content) {
         const s = lastString();
         if (s) {
           const trm = mul(tm, ctm);
-          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
+          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, fillColor: [...fillColor], op: tok.value, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
         }
         break;
       }
@@ -78,7 +90,7 @@ export function extractTextRuns(content) {
         const s = lastString();
         if (s) {
           const trm = mul(tm, ctm);
-          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
+          runs.push({ text: s.value, x: trm.e, y: trm.f, fontRef, fontSize, fillColor: [...fillColor], op: tok.value, strByteStart: s.start, strByteEnd: s.end, strKind: s.kind, opIndex: t, opByteStart: operands[0]?.start ?? s.start, opByteEnd: tok.end });
         }
         break;
       }
@@ -91,7 +103,7 @@ export function extractTextRuns(content) {
         }
         if (first) {
           const trm = mul(tm, ctm);
-          runs.push({ text, x: trm.e, y: trm.f, fontRef, fontSize, strByteStart: first.start, strByteEnd: last.end, strKind: 'array', opIndex: t, opByteStart: operands[0]?.start ?? first.start, opByteEnd: tok.end });
+          runs.push({ text, x: trm.e, y: trm.f, fontRef, fontSize, fillColor: [...fillColor], op: tok.value, strByteStart: first.start, strByteEnd: last.end, strKind: 'array', opIndex: t, opByteStart: operands[0]?.start ?? first.start, opByteEnd: tok.end });
         }
         break;
       }

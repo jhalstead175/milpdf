@@ -84,16 +84,25 @@ async function registerNamedFont(doc, page, fontFamily) {
   return registerFont(doc, page, stdFont, name);
 }
 
-// Build the operator sequence for a formatted run:
-//   [color rg]  /fontRef size Tf  <text> Tj  /origFont origSize Tf  [restore-color]
-function buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, color) {
+// Build the operator sequence for a formatted run.
+// Preserves the run's implicit line-advance (T* for ' and " operators) and
+// restores the inherited fill color rather than hardcoding black.
+function buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, color, run) {
   let seq = '';
+
+  // ' and " operators imply T* (line advance) before the show.
+  if (run?.op === "'" || run?.op === '"') seq += 'T* ';
+
   if (color) {
     const { r, g, b } = hexToRgb(color);
     seq += `${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)} rg `;
   }
   seq += `/${fontRef} ${size} Tf ${encodeHexString(newText)} Tj /${origFontRef} ${origSize} Tf`;
-  if (color) seq += ' 0 0 0 rg';
+  if (color) {
+    // Restore the color that was in effect before the run, not necessarily black.
+    const [pr, pg, pb] = run?.fillColor ?? [0, 0, 0];
+    seq += ` ${pr.toFixed(4)} ${pg.toFixed(4)} ${pb.toFixed(4)} rg`;
+  }
   return seq;
 }
 
@@ -124,7 +133,7 @@ export async function applyTextEdit(pdfBytes, pageNumber, run, newText, fmt = {}
     }
 
     const size = fmt.fontSize || origSize;
-    const seq = buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, fmt.color || null);
+    const seq = buildFormattedSeq(fontRef, size, newText, origFontRef, origSize, fmt.color || null, run);
     newContent = content.slice(0, run.opByteStart) + seq + content.slice(run.opByteEnd);
   } else {
     newContent = replaceRunText(content, run, newText);

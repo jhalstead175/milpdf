@@ -1132,6 +1132,10 @@ export default function PDFViewer({
                   placeholder={String(Math.round(textEditTarget.run.fontSize || 12))}
                   value={textEditTarget.fmt.fontSize}
                   onChange={e => setTextEditTarget(t => t ? { ...t, fmt: { ...t.fmt, fontSize: e.target.value } } : t)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitTextEdit(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); setTextEditTarget(null); }
+                  }}
                   onBlur={() => setTimeout(() => textEditInputRef.current?.focus(), 0)}
                   style={{ width: 44, fontSize: 11, padding: '1px 3px', borderRadius: 3, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0' }}
                 />
